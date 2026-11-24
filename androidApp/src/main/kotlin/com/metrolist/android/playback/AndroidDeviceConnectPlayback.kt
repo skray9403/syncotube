@@ -7,6 +7,7 @@ import com.metrolist.android.deviceconnect.canUseDeviceConnectTrack
 import com.metrolist.android.deviceconnect.requiresDeviceConnectTrackReload
 import com.metrolist.android.deviceconnect.toDeviceConnectRepeatMode
 import com.metrolist.android.deviceconnect.toPlayerRepeatMode
+import com.metrolist.android.nectarcast.NectarCastRegistry
 import com.metrolist.shared.deviceconnect.DcLocalPlaybackState
 import com.metrolist.shared.deviceconnect.DcPlaybackSnapshot
 import com.metrolist.shared.deviceconnect.DcScrobbleSession
@@ -333,7 +334,12 @@ internal class AndroidDeviceConnectPlayback(
             }
         }
 
+    init {
+        NectarCastRegistry.bindPort(port)
+    }
+
     fun release() {
         playbackReleased = true
+        NectarCastRegistry.unbindPort(port)
     }
 }

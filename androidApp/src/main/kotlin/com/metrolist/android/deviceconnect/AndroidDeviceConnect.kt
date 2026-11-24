@@ -13,6 +13,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import com.metrolist.android.listentogether.AndroidListenTogetherManager
+import com.metrolist.android.nectarcast.NectarCastRegistry
 import com.metrolist.shared.deviceconnect.DcPlaybackAction
 import com.metrolist.shared.deviceconnect.DcPlaybackCommand
 import com.metrolist.shared.deviceconnect.DcPlaybackSnapshot
@@ -29,7 +30,8 @@ object AndroidDeviceConnect {
         command: DcPlaybackCommand,
         expectedQueue: MusicQueueSnapshot? = null,
     ): Boolean =
-        manager.remote.intercept(command, expectedQueue = expectedQueue) ||
+        NectarCastRegistry.intercept(command) ||
+            manager.remote.intercept(command, expectedQueue = expectedQueue) ||
             (AndroidListenTogetherManager.isGuestPlaybackLocked && command.action != DcPlaybackAction.VOLUME)
 
     internal fun requiredLocalNetworkPermission(): String? = deviceConnectLocalNetworkPermission(Build.VERSION.SDK_INT)

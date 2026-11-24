@@ -7,6 +7,10 @@ package com.metrolist.android.di
 
 import coil3.ImageLoader
 import coil3.imageLoader
+import com.metrolist.android.nectarcast.NectarCastController
+import com.metrolist.android.nectarcast.NectarCastDiscovery
+import com.metrolist.android.nectarcast.NectarTransportBridge
+import com.metrolist.android.nectarcast.StubNectarTransportBridge
 import com.metrolist.android.playback.AudioCacheManager
 import com.metrolist.android.playback.ExoPlaybackBenchmarkPlayer
 import com.metrolist.android.playback.PlayerConnection
@@ -72,6 +76,24 @@ val appModule =
                 context = androidContext(),
                 audioCacheManager = get(),
                 database = get(),
+            )
+        }
+
+        single<NectarTransportBridge> {
+            StubNectarTransportBridge()
+        }
+
+        single<NectarCastDiscovery> {
+            NectarCastDiscovery(
+                context = androidContext(),
+                transport = get(),
+            )
+        }
+
+        single<NectarCastController> {
+            NectarCastController(
+                scope = get(),
+                transport = get(),
             )
         }
 
