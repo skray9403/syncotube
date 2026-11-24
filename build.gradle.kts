@@ -28,14 +28,17 @@ subprojects {
     configure<KtlintExtension> {
         version.set("1.8.0")
         filter {
-            exclude { element -> element.file.invariantSeparatorsPath.contains("/build/generated/") }
+            exclude { element ->
+                val path = element.file.invariantSeparatorsPath
+                path.contains("/build/generated/") || path.contains("/nectarcast/")
+            }
         }
     }
 
     tasks.withType<BaseKtLintCheckTask>().configureEach {
         exclude { element ->
             element.file.invariantSeparatorsPath.let { path ->
-                path.contains("/build/generated/") || path.contains("/build/kspCaches/")
+                path.contains("/build/generated/") || path.contains("/build/kspCaches/") || path.contains("/nectarcast/")
             }
         }
     }

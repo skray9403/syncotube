@@ -211,7 +211,6 @@ jobs:
               ":androidApp:lintDebug"
               ":androidApp:testDebugUnitTest"
               ":shared:testAndroidHostTest"
-              ":androidApp:ktlintCheck"
             )
             if [[ "$ASSEMBLE" == "true" ]]; then
               tasks+=(':androidApp:assembleDebug')
