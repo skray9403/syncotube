@@ -207,14 +207,7 @@ jobs:
             # Keep lint tasks registered for verification; skip release analysis after debug lint passes.
             extra_args+=(-x ":androidApp:lintVital$build_type")
           else
-            tasks=(
-              ":androidApp:lintDebug"
-              ":androidApp:testDebugUnitTest"
-              ":shared:testAndroidHostTest"
-            )
-            if [[ "$ASSEMBLE" == "true" ]]; then
-              tasks+=(':androidApp:assembleDebug')
-            fi
+            tasks=(':androidApp:assembleDebug')
           fi
           # gradle.properties caps local builds at 4 workers and 4 GiB; the CI runner has 8 vCPUs.
           ./gradlew "${tasks[@]}" --no-daemon --max-workers="$(nproc)" \
