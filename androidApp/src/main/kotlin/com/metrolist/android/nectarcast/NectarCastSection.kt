@@ -1,3 +1,8 @@
+/**
+ * Metrolist Project (C) 2026
+ * Licensed under GPL-3.0 | See git history for contributors
+ */
+
 package com.metrolist.android.nectarcast
 
 import androidx.compose.foundation.clickable
@@ -37,9 +42,10 @@ fun NectarCastSection(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
@@ -110,20 +116,28 @@ fun NectarCastSection(
                 val isActive = session.activePeer?.deviceId == peer.deviceId
                 val isTransferring = session.transferringDeviceId == peer.deviceId
                 ListItem(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !isTransferring) { onSelectPeer(peer) },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isTransferring) { onSelectPeer(peer) },
                     leadingContent = {
-                        Icon(
-                            imageVector = when (peer.platform) {
+                        val icon =
+                            when (peer.platform) {
                                 NectarPlatform.WINDOWS, NectarPlatform.LINUX -> MetrolistIcons.Outlined.Computer
                                 NectarPlatform.ANDROID -> MetrolistIcons.Outlined.PhoneAndroid
                                 NectarPlatform.TIZEN -> MetrolistIcons.Filled.Tv
                                 NectarPlatform.UNKNOWN -> MetrolistIcons.Outlined.Devices
-                            },
+                            }
+                        val tint =
+                            if (isActive) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        Icon(
+                            imageVector = icon,
                             contentDescription = null,
-                            tint = if (isActive) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = tint,
                         )
                     },
                     headlineContent = {
@@ -135,15 +149,20 @@ fun NectarCastSection(
                     },
                     trailingContent = {
                         when {
-                            isTransferring -> CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                            )
-                            isActive -> Icon(
-                                MetrolistIcons.Rounded.Cast,
-                                contentDescription = "Connected",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
+                            isTransferring -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+
+                            isActive -> {
+                                Icon(
+                                    MetrolistIcons.Rounded.Cast,
+                                    contentDescription = "Connected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
                     },
                 )
