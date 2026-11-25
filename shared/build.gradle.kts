@@ -110,7 +110,7 @@ abstract class GenerateOpusTestFixture : DefaultTask() {
 
 val generateOpusTestFixture =
     tasks.register<GenerateOpusTestFixture>("generateOpusTestFixture") {
-        fixture.set(layout.projectDirectory.file("src/desktopTest/resources/ffmpeg/opus-251.webm"))
+        fixture.set(layout.projectDirectory.file("src/androidHostTest/resources/ffmpeg/opus-251.webm"))
         outputDirectory.set(layout.buildDirectory.dir("generated/opusTestFixture"))
     }
 
@@ -637,7 +637,6 @@ val innerTubeStreamOrdinalFilter =
 
 val sabrVideoId = providers.systemProperty("sabrVideoId").orElse("")
 val sabrUsePlaybackClock = providers.systemProperty("sabrUsePlaybackClock").orElse("true")
-val runLiveDesktopSabrPlaybackTest = providers.systemProperty("runLiveDesktopSabrPlaybackTest").orElse("false")
 val signedOutProbeVideoId =
     providers
         .systemProperty("signedOutProbeVideoId")
@@ -678,7 +677,6 @@ tasks.withType<Test>().configureEach {
     inputs.property("innerTubeStreamOrdinalFilter", innerTubeStreamOrdinalFilter)
     inputs.property("sabrVideoId", sabrVideoId)
     inputs.property("sabrUsePlaybackClock", sabrUsePlaybackClock)
-    inputs.property("runLiveDesktopSabrPlaybackTest", runLiveDesktopSabrPlaybackTest)
     inputs.property("signedOutProbeVideoId", signedOutProbeVideoId)
     systemProperty("runLiveLyricsTests", runLiveLyricsTests.get())
     systemProperty(
@@ -717,7 +715,6 @@ tasks.withType<Test>().configureEach {
     systemProperty("innerTubeStreamOrdinalFilter", innerTubeStreamOrdinalFilter.get())
     systemProperty("sabrVideoId", sabrVideoId.get())
     systemProperty("sabrUsePlaybackClock", sabrUsePlaybackClock.get())
-    systemProperty("runLiveDesktopSabrPlaybackTest", runLiveDesktopSabrPlaybackTest.get())
     systemProperty("signedOutProbeVideoId", signedOutProbeVideoId.get())
     systemProperty(
         "liveInnerTubeBenchmarkReportDir",
