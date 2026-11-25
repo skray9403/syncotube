@@ -172,8 +172,6 @@ fun SearchScreen(
     onSearchResultsVisible: (Boolean) -> Unit = {},
     searchViewModel: SearchViewModel = koinViewModel(),
 ) {
-    val voiceSearchPromptText = stringResource(Res.string.voice_search_prompt)
-    val voiceSearchUnavailableText = stringResource(Res.string.voice_search_unavailable)
     val shareSongText = stringResource(Res.string.share_song)
     val albumLinkText = stringResource(Res.string.album_link)
     val artistLinkText = stringResource(Res.string.artist_link)
@@ -202,33 +200,6 @@ fun SearchScreen(
         if (searchUiState.historyMutationFailures > 0) Toast.makeText(context, historyRemovalFailed, Toast.LENGTH_LONG).show()
     }
 
-    val addToPlaylist = LocalPlaylistAdder.current
-    var showSongMenu by remember { mutableStateOf<SongItem?>(null) }
-    var showAlbumMenu by remember { mutableStateOf<AlbumItem?>(null) }
-    var showArtistMenu by remember { mutableStateOf<ArtistItem?>(null) }
-    var showPlaylistMenu by remember { mutableStateOf<PlaylistItem?>(null) }
-    var showPodcastMenu by remember { mutableStateOf<PodcastItem?>(null) }
-
-    fun withPodcastSongs(
-        podcast: PodcastItem,
-        action: (List<SongItem>) -> Unit,
-    ) {
-        scope.launch {
-            try {
-                val songs = loadMediaItemSongs(podcast)
-                if (songs.isEmpty()) {
-                    Toast.makeText(context, getString(Res.string.unable_to_load_podcast), Toast.LENGTH_SHORT).show()
-                } else {
-                    action(songs)
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                Toast.makeText(context, getString(Res.string.unable_to_load_podcast), Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     val miniPlayerInset = LocalMiniPlayerBottomInset.current
     val isTv = LocalIsTv.current
     val density = LocalDensity.current
@@ -247,7 +218,6 @@ fun SearchScreen(
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val voiceSearchEnabled = Settings.shared.voiceSearchEnabled
     val isPlayerExpanded = LocalPlayerExpanded.current
 
     val dismissKeyboardAndFocus = {
@@ -327,30 +297,6 @@ fun SearchScreen(
         }
     }
 
-    val voiceSearchLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                result.data
-                    ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                    ?.firstOrNull()
-                    ?.let(submitSearch)
-            }
-        }
-
-    val launchVoiceSearch = {
-        val intent =
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_PROMPT, voiceSearchPromptText)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            }
-        if (intent.resolveActivity(context.packageManager) != null) {
-            voiceSearchLauncher.launch(intent)
-        } else {
-            Toast.makeText(context, voiceSearchUnavailableText, Toast.LENGTH_SHORT).show()
-        }
-    }
-
     LaunchedEffect(initialQuery) {
         val queryFromIntent = initialQuery?.trim().orEmpty()
         if (queryFromIntent.isNotEmpty() && queryFromIntent != query) {
@@ -387,8 +333,7 @@ fun SearchScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-
+                    .padding(paddingValues),
             contentAlignment = Alignment.TopCenter,
         ) {
             val searchBarEndPadding =
