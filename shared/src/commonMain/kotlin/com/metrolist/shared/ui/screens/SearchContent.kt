@@ -1030,12 +1030,10 @@ private fun SearchResultsList(
                 Box(Modifier.widthIn(max = 1400.dp).fillMaxWidth()) {
                     ChipShelf(
                         options =
-                            SearchFilter.entries.toList().filterAvailableSearchFilters(
-                                hideVideoSongs = Settings.shared.hideVideoSongs,
-                                hidePodcasts = Settings.shared.hidePodcasts,
-                            ),
-                        selectedOption = selectedFilter,
-                        onSelectionChange = onFilterSelected,
+                            listOf(SearchFilter.SONG),
+                        selectedOption = SearchFilter.SONG,
+                        onSelectionChange = { onFilterSelected(SearchFilter.SONG) },
+                        selectionRequired = true,
                         label = { filter ->
                             when (filter) {
                                 SearchFilter.SONG -> text.filterSongs
@@ -1049,7 +1047,6 @@ private fun SearchResultsList(
                                 SearchFilter.PROFILE -> text.filterProfiles
                             }
                         },
-                        allLabel = text.filterAll,
                     )
                 }
             }
