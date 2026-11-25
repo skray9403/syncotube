@@ -148,12 +148,12 @@ class SearchViewModel(
                 filteredResults = null,
             )
         }
-        searchFiltered(SearchFilter.SONG)
+        searchFiltered(SearchFilter.SONG, recordSearchHistory = !Settings.shared.pauseSearchHistory)
     }
 
     fun search(recordSearchHistory: Boolean = false) {
         _uiState.value.selectedFilter?.let { filter ->
-            searchFiltered(filter)
+            searchFiltered(filter, recordSearchHistory)
             return
         }
         val currentQuery = _uiState.value.query
@@ -205,10 +205,12 @@ class SearchViewModel(
             }
     }
 
-    fun searchFiltered(filter: SearchFilter) {
+    fun searchFiltered(
+        filter: SearchFilter,
+        recordSearchHistory: Boolean = !Settings.shared.pauseSearchHistory,
+    ) {
         val currentQuery = _uiState.value.query
         if (currentQuery.isEmpty()) return
-        val recordSearchHistory = !Settings.shared.pauseSearchHistory
         if (recordSearchHistory) addSearchHistory(currentQuery)
         val pendingHistoryMutation = historyMutationJob.takeIf { recordSearchHistory }
 
