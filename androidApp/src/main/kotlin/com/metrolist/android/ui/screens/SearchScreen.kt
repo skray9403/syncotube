@@ -194,18 +194,7 @@ fun SearchScreen(
     val playerConnection = LocalPlayerConnection.current
     val currentSong by playerConnection?.currentSong?.collectAsState() ?: remember { mutableStateOf(null) }
     val isPlaying by playerConnection?.isPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
-    val itemContainer: @Composable (YTItem, @Composable () -> Unit) -> Unit = { item, content ->
-        if (item is SongItem) {
-            SwipeGestureHandler(
-                onSwipeLeft = { playerConnection?.addToQueue(item) },
-                onSwipeRight = { playerConnection?.addToQueue(item, playNext = true) },
-                enabled = playerConnection != null && Settings.shared.swipeToSong,
-                content = content,
-            )
-        } else {
-            content()
-        }
-    }
+    val itemContainer: @Composable (YTItem, @Composable () -> Unit) -> Unit = { _, content -> content() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val historyRemovalFailed = stringResource(Res.string.search_history_removal_failed)
@@ -260,7 +249,6 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val voiceSearchEnabled = Settings.shared.voiceSearchEnabled
     val isPlayerExpanded = LocalPlayerExpanded.current
-    var showFloatingAction by remember { mutableStateOf(true) }
 
     val dismissKeyboardAndFocus = {
         keyboardController?.hide()
@@ -276,24 +264,6 @@ fun SearchScreen(
             onSearchResultsVisible(false)
         }
     }
-
-    val fabNestedScrollConnection =
-        remember {
-            object : NestedScrollConnection {
-                override fun onPreScroll(
-                    available: Offset,
-                    source: NestedScrollSource,
-                ): Offset {
-                    if (source == NestedScrollSource.UserInput) {
-                        when {
-                            available.y < -1f -> showFloatingAction = false
-                            available.y > 1f -> showFloatingAction = true
-                        }
-                    }
-                    return Offset.Zero
-                }
-            }
-        }
 
     val returnToMainSearch = {
         dismissKeyboardAndFocus()
@@ -418,7 +388,7 @@ fun SearchScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .nestedScroll(fabNestedScrollConnection),
+
             contentAlignment = Alignment.TopCenter,
         ) {
             val searchBarEndPadding =
