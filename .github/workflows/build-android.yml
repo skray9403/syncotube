@@ -1,6 +1,8 @@
 name: Build Android
 
 on:
+  push:
+    branches: [minimal-youtube-lyrics]
   workflow_dispatch:
     inputs:
       variant:
@@ -10,7 +12,7 @@ on:
         default: release
 
 concurrency:
-  # Dispatched APK builds get their own group so pushes to main cannot cancel them.
+  # Keep the minimal-client APK build isolated from unrelated repository builds.
   group: android-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
@@ -22,7 +24,7 @@ jobs:
       contents: read
     with:
       variant: ${{ inputs.variant || 'debug' }}
-      upload-artifact: ${{ github.event_name == 'workflow_dispatch' }}
+      upload-artifact: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
       require-signing: ${{ inputs.variant == 'release' }}
       cache-read-only: ${{ github.event_name == 'pull_request' }}
     secrets:
