@@ -31,6 +31,7 @@ import com.metrolist.android.backup.BackupRestoreManager
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
 import com.metrolist.android.di.appModule
 import com.metrolist.android.locale.AppLocale
+import com.metrolist.android.nectarcast.NectarCastController
 import com.metrolist.android.onboarding.LegacyInstallMigration
 import com.metrolist.android.onboarding.OnboardingManager
 import com.metrolist.android.playback.AudioCacheManager
@@ -293,6 +294,9 @@ class App :
             modules(coreModule, sharedModule, appModule)
         }
         Timber.tag(TAG).d("Koin init complete elapsed=%dms", SystemClock.elapsedRealtime() - koinStart)
+
+        // Eagerly initialize NectarCastController so receiving devices advertise & listen immediately
+        get<NectarCastController>()
 
         get<CoroutineScope>().launch {
             IconUtils.syncWithPreference(this@App)

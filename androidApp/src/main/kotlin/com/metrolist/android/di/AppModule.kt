@@ -82,11 +82,11 @@ val appModule =
             )
         }
 
-        single<NectarDeviceIdentity> {
+        single {
             NectarDeviceIdentity(context = androidContext())
         }
 
-        single<NectarCastAdvertiser> {
+        single {
             NectarCastAdvertiser(
                 context = androidContext(),
                 identity = get(),
@@ -100,28 +100,19 @@ val appModule =
             )
         }
 
-        single<NectarCastDiscovery> {
+        single {
             NectarCastDiscovery(
                 context = androidContext(),
-                localDeviceId = get<NectarDeviceIdentity>().deviceId,
+                identity = get(),
                 transport = get(),
             )
         }
 
-        single<NectarCastController>(createdAtStart = true) {
+        single(createdAtStart = true) {
             NectarCastController(
                 scope = get(),
+                identity = get(),
                 transport = get(),
-                ensurePort = {
-                    NectarCastRegistry.port ?: run {
-                        runCatching {
-                            withContext(Dispatchers.Main.immediate) {
-                                get<PlayerConnection>().awaitConnected()
-                            }
-                        }
-                        NectarCastRegistry.port
-                    }
-                },
             )
         }
 

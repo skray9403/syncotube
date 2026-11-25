@@ -162,6 +162,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.metrolist.android.nectarcast.NectarActiveBanner
+import com.metrolist.android.nectarcast.NectarCastController
+import com.metrolist.android.ui.screens.PlayerDeviceConnectSheet
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import timber.log.Timber
@@ -201,10 +204,15 @@ fun MiniPlayer(
         } else {
             progressWidthPx
         }
+    val nectarController: NectarCastController = koinInject()
+    val nectarSession by nectarController.sessionState.collectAsState()
+    var showDeviceConnectSheet by remember { mutableStateOf(false) }
+
     val duration by playerConnection.duration.collectAsState(initial = 0L)
     val playbackSpeed by playerConnection.playbackSpeedFlow.collectPlaybackDisplayState(progressActive) { it }
     val isCasting by playerConnection.castState.collectPlaybackDisplayState(progressActive) { it.isConnected }
-    val interpolationSpeed = if (isCasting) 1f else playbackSpeed
+    val isCastingOrNectar = isCasting || nectarSession.activePeer != null
+    val interpolationSpeed = if (isCastingOrNectar) 1f else playbackSpeed
     val isProgressAnimating = progressActive && duration > 0L && isPlaying && !isPlaybackLoading
     val progress =
         key(
@@ -317,157 +325,174 @@ fun MiniPlayer(
             label = "arcAlpha",
         )
 
-    Box(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .height(
-                    if (useDesktopLayout) {
-                        DesktopMiniPlayerHeight
-                    } else if (isExpressiveMiniPlayer) {
-                        ExpressiveMiniPlayerHeight
-                    } else if (isModern) {
-                        modernMiniPlayerHeight(LocalDensity.current)
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (nectarSession.activePeer != null) {
+            NectarActiveBanner(
+                session = nectarSession,
+                onOpenSheet = { showDeviceConnectSheet = true },
+                onReturnToPhone = { nectarController.returnToThisPhone() },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(
+                        if (useDesktopLayout) {
+                            DesktopMiniPlayerHeight
+                        } else if (isExpressiveMiniPlayer) {
+                            ExpressiveMiniPlayerHeight
+                        } else if (isModern) {
+                            modernMiniPlayerHeight(LocalDensity.current)
+                        } else {
+                            MiniPlayerHeight
+                        },
+                    ).then(
+                        if (isModern || isExpressiveMiniPlayer) {
+                            Modifier
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                                .padding(horizontal = ModernMiniPlayerHorizontalPadding)
+                        } else {
+                            Modifier
+                        },
+                    ).miniPlayerGestures(
+                        layoutDirection = layoutDirection,
+                        hapticManager = hapticManager,
+                        dragOffset = dragOffset,
+                        onDragStart = {
+                            offsetResetJob?.cancel()
+                            dragOffset.value = Offset.Zero
+                        },
+                        onResetDragOffset = ::resetDragOffset,
+                        swipeThreshold = swipeThreshold,
+                        canSkipNext = canSkipNext,
+                        canSkipPrevious = canSkipPrevious,
+                        onSkipNext = { playerConnection.skipToNext() },
+                        onSkipPrevious = { playerConnection.skipToPrevious() },
+                    ),
+        ) {
+            if (isExpressiveMiniPlayer) {
+                val database: MusicDatabase = koinInject()
+                val artist = song.artists.firstOrNull { !it.id.isNullOrBlank() }
+                val artistId = artist?.id
+                val isArtistSubscribed =
+                    if (miniPlayerActive && Settings.shared.showExpressiveMiniPlayerSubscribeButton) {
+                        rememberArtistSubscription(database, artistId)
                     } else {
-                        MiniPlayerHeight
+                        false
+                    }
+                val subscribedMessage = stringResource(Res.string.subscribed_to_artist, artist?.displayName.orEmpty())
+                val subscriptionError = stringResource(Res.string.error_occurred)
+                val addToPlaylist = LocalPlaylistAdder.current
+                ExpressiveMiniPlayer(
+                    song = song,
+                    isPlaying = isPlaying,
+                    isLoading = isPlaybackLoading && miniPlayerActive,
+                    active = miniPlayerActive,
+                    onTogglePlay = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        playerConnection.togglePlayPause()
                     },
-                ).then(
-                    if (isModern || isExpressiveMiniPlayer) {
-                        Modifier
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                            .padding(horizontal = ModernMiniPlayerHorizontalPadding)
-                    } else {
-                        Modifier
+                    onSkipNext = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        playerConnection.skipToNext()
                     },
-                ).miniPlayerGestures(
-                    layoutDirection = layoutDirection,
-                    hapticManager = hapticManager,
-                    dragOffset = dragOffset,
-                    onDragStart = {
-                        offsetResetJob?.cancel()
-                        dragOffset.value = Offset.Zero
+                    onSkipPrevious = { playerConnection.skipToPrevious() },
+                    onExpand = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        onExpand()
                     },
-                    onResetDragOffset = ::resetDragOffset,
-                    swipeThreshold = swipeThreshold,
                     canSkipNext = canSkipNext,
                     canSkipPrevious = canSkipPrevious,
-                    onSkipNext = { playerConnection.skipToNext() },
-                    onSkipPrevious = { playerConnection.skipToPrevious() },
-                ),
-    ) {
-        if (isExpressiveMiniPlayer) {
-            val database: MusicDatabase = koinInject()
-            val artist = song.artists.firstOrNull { !it.id.isNullOrBlank() }
-            val artistId = artist?.id
-            val isArtistSubscribed =
-                if (miniPlayerActive && Settings.shared.showExpressiveMiniPlayerSubscribeButton) {
-                    rememberArtistSubscription(database, artistId)
-                } else {
-                    false
-                }
-            val subscribedMessage = stringResource(Res.string.subscribed_to_artist, artist?.displayName.orEmpty())
-            val subscriptionError = stringResource(Res.string.error_occurred)
-            val addToPlaylist = LocalPlaylistAdder.current
-            ExpressiveMiniPlayer(
-                song = song,
-                isPlaying = isPlaying,
-                isLoading = isPlaybackLoading && miniPlayerActive,
-                active = miniPlayerActive,
-                onTogglePlay = {
-                    hapticManager.perform(HapticEvent.PRESS)
-                    playerConnection.togglePlayPause()
-                },
-                onSkipNext = {
-                    hapticManager.perform(HapticEvent.PRESS)
-                    playerConnection.skipToNext()
-                },
-                onSkipPrevious = { playerConnection.skipToPrevious() },
-                onExpand = {
-                    hapticManager.perform(HapticEvent.PRESS)
-                    onExpand()
-                },
-                canSkipNext = canSkipNext,
-                canSkipPrevious = canSkipPrevious,
-                playbackEnabled = true,
-                swipeThresholdPx = swipeThreshold,
-                isVisible = true,
-                modifier =
-                    Modifier
-                        .then(if (cardFocusRequester != null) Modifier.focusRequester(cardFocusRequester) else Modifier)
-                        .graphicsLayer { translationX = dragOffset.value.x },
-                onDpadExpand = {
-                    hapticManager.perform(HapticEvent.PRESS)
-                    onDpadExpand()
-                },
-                playbackActionLabel = null,
-                playbackActionIcon = null,
-                swipeEnabled = false,
-                progress = { progress.value },
-                progressAvailable = !isLive && duration > 0L,
-                isLiked = SongLikeState.isLiked(song.id),
-                isArtistSubscribed = isArtistSubscribed,
-                onLike = { SongLikeState.toggleLike(song) },
-                onSubscribeToggle =
-                    if (artistId != null) {
-                        {
-                            toggleArtistSubscription(
-                                coroutineScope,
-                                database,
-                                GlobalYouTubeRepository.instance,
-                                artistId,
-                                artist.displayName,
-                                onSubscriptionChanged = { subscribed ->
-                                    if (subscribed) Toast.makeText(context, subscribedMessage, Toast.LENGTH_SHORT).show()
-                                },
-                                onError = { Toast.makeText(context, subscriptionError, Toast.LENGTH_SHORT).show() },
-                            )
-                        }
-                    } else {
-                        null
+                    playbackEnabled = true,
+                    swipeThresholdPx = swipeThreshold,
+                    isVisible = true,
+                    modifier =
+                        Modifier
+                            .then(if (cardFocusRequester != null) Modifier.focusRequester(cardFocusRequester) else Modifier)
+                            .graphicsLayer { translationX = dragOffset.value.x },
+                    onDpadExpand = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        onDpadExpand()
                     },
-                onAddToPlaylist = { addToPlaylist(listOf(song)) },
-            )
-            return
+                    playbackActionLabel = null,
+                    playbackActionIcon = null,
+                    swipeEnabled = false,
+                    progress = { progress.value },
+                    progressAvailable = !isLive && duration > 0L,
+                    isLiked = SongLikeState.isLiked(song.id),
+                    isArtistSubscribed = isArtistSubscribed,
+                    onLike = { SongLikeState.toggleLike(song) },
+                    onSubscribeToggle =
+                        if (artistId != null) {
+                            {
+                                toggleArtistSubscription(
+                                    coroutineScope,
+                                    database,
+                                    GlobalYouTubeRepository.instance,
+                                    artistId,
+                                    artist.displayName,
+                                    onSubscriptionChanged = { subscribed ->
+                                        if (subscribed) Toast.makeText(context, subscribedMessage, Toast.LENGTH_SHORT).show()
+                                    },
+                                    onError = { Toast.makeText(context, subscriptionError, Toast.LENGTH_SHORT).show() },
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    onAddToPlaylist = { addToPlaylist(listOf(song)) },
+                )
+            } else {
+                MiniPlayerCard(
+                    useDesktopLayout = useDesktopLayout,
+                    currentSong = song,
+                    isLive = isLive,
+                    modifier = Modifier.onSizeChanged { progressWidthPx = it.width },
+                    marqueeModifier = marqueeModifier,
+                    nextArtworkUrl = nextArtworkUrl,
+                    active = miniPlayerActive,
+                    artworkCrossfadeProgress = artworkCrossfadeProgress,
+                    isPlaying = isPlaying,
+                    isPlaybackLoading = isPlaybackLoading && miniPlayerActive,
+                    progress = { progress.value },
+                    bufferedProgress = { bufferedProgress.value },
+                    arcAlpha = arcAlpha,
+                    dragOffset = dragOffset,
+                    onExpand = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        onExpand()
+                    },
+                    onDpadExpand = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        onDpadExpand()
+                    },
+                    onTogglePlayPause = {
+                        hapticManager.toggle(!isPlaying)
+                        playerConnection.togglePlayPause()
+                    },
+                    canSkipPrevious = canSkipPrevious,
+                    onSkipPrevious = { playerConnection.skipToPrevious() },
+                    canSkipNext = canSkipNext,
+                    onSkipNext = {
+                        hapticManager.perform(HapticEvent.PRESS)
+                        playerConnection.skipToNext()
+                    },
+                    onLike = { songId ->
+                        hapticManager.toggle(!SongLikeState.isLiked(songId))
+                        SongLikeState.toggleLike(song)
+                    },
+                    focusRequester = cardFocusRequester,
+                )
+            }
         }
-        MiniPlayerCard(
-            useDesktopLayout = useDesktopLayout,
-            currentSong = song,
-            isLive = isLive,
-            modifier = Modifier.onSizeChanged { progressWidthPx = it.width },
-            marqueeModifier = marqueeModifier,
-            nextArtworkUrl = nextArtworkUrl,
-            active = miniPlayerActive,
-            artworkCrossfadeProgress = artworkCrossfadeProgress,
-            isPlaying = isPlaying,
-            isPlaybackLoading = isPlaybackLoading && miniPlayerActive,
-            progress = { progress.value },
-            bufferedProgress = { bufferedProgress.value },
-            arcAlpha = arcAlpha,
-            dragOffset = dragOffset,
-            onExpand = {
-                hapticManager.perform(HapticEvent.PRESS)
-                onExpand()
-            },
-            onDpadExpand = {
-                hapticManager.perform(HapticEvent.PRESS)
-                onDpadExpand()
-            },
-            onTogglePlayPause = {
-                hapticManager.toggle(!isPlaying)
-                playerConnection.togglePlayPause()
-            },
-            canSkipPrevious = canSkipPrevious,
-            onSkipPrevious = { playerConnection.skipToPrevious() },
-            canSkipNext = canSkipNext,
-            onSkipNext = {
-                hapticManager.perform(HapticEvent.PRESS)
-                playerConnection.skipToNext()
-            },
-            onLike = { songId ->
-                hapticManager.toggle(!SongLikeState.isLiked(songId))
-                SongLikeState.toggleLike(song)
-            },
-            focusRequester = cardFocusRequester,
+    }
+
+    if (showDeviceConnectSheet) {
+        PlayerDeviceConnectSheet(
+            onDismissRequest = { showDeviceConnectSheet = false },
+            onNavigateToIntegrations = {},
         )
     }
 }

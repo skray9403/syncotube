@@ -8,9 +8,11 @@ package com.metrolist.android.nectarcast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,10 +44,9 @@ fun NectarCastSection(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
@@ -54,7 +55,7 @@ fun NectarCastSection(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "NectarCast (Wi-Fi · BLE · QUIC)",
+                text = "NectarCast",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -73,7 +74,11 @@ fun NectarCastSection(
             ) {
                 Icon(MetrolistIcons.Outlined.PhoneAndroid, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Playing on ${session.activePeer.displayName} · Return to phone")
+                Text(
+                    text = "Playing on ${session.activePeer.displayName} · Return",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
 
@@ -88,11 +93,13 @@ fun NectarCastSection(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Bluetooth scan off — Wi-Fi & NectarLink active",
+                        text = "Bluetooth off — Wi-Fi discovery active",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onRequestBlePermission) { Text("Allow") }
+                    TextButton(onClick = onRequestBlePermission) {
+                        Text("Allow")
+                    }
                 }
             }
         }
@@ -107,7 +114,7 @@ fun NectarCastSection(
 
         if (peers.isEmpty() && !isScanning) {
             Text(
-                text = "No NectarCast daemons detected.",
+                text = "No NectarCast devices found on Wi-Fi or Bluetooth.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -116,28 +123,20 @@ fun NectarCastSection(
                 val isActive = session.activePeer?.deviceId == peer.deviceId
                 val isTransferring = session.transferringDeviceId == peer.deviceId
                 ListItem(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isTransferring) { onSelectPeer(peer) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isTransferring) { onSelectPeer(peer) },
                     leadingContent = {
-                        val icon =
-                            when (peer.platform) {
+                        Icon(
+                            imageVector = when (peer.platform) {
                                 NectarPlatform.WINDOWS, NectarPlatform.LINUX -> MetrolistIcons.Outlined.Computer
                                 NectarPlatform.ANDROID -> MetrolistIcons.Outlined.PhoneAndroid
                                 NectarPlatform.TIZEN -> MetrolistIcons.Filled.Tv
                                 NectarPlatform.UNKNOWN -> MetrolistIcons.Outlined.Devices
-                            }
-                        val tint =
-                            if (isActive) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        Icon(
-                            imageVector = icon,
+                            },
                             contentDescription = null,
-                            tint = tint,
+                            tint = if (isActive) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                     headlineContent = {
@@ -149,20 +148,15 @@ fun NectarCastSection(
                     },
                     trailingContent = {
                         when {
-                            isTransferring -> {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-
-                            isActive -> {
-                                Icon(
-                                    MetrolistIcons.Rounded.Cast,
-                                    contentDescription = "Connected",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
+                            isTransferring -> CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            isActive -> Icon(
+                                imageVector = MetrolistIcons.Rounded.Cast,
+                                contentDescription = "Connected",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
                         }
                     },
                 )
@@ -170,5 +164,50 @@ fun NectarCastSection(
         }
 
         HorizontalDivider()
+    }
+}
+
+@Composable
+fun NectarActiveBanner(
+    session: NectarSessionUiState,
+    onOpenSheet: () -> Unit,
+    onReturnToPhone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val peer = session.activePeer ?: return
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenSheet),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = MetrolistIcons.Rounded.Cast,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "${peer.displayName} · ${peer.primaryRoute.protocol.label}",
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = onReturnToPhone,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(28.dp),
+            ) {
+                Text("Return", style = MaterialTheme.typography.labelMedium)
+            }
+        }
     }
 }
