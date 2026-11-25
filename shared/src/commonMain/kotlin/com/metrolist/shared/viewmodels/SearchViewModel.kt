@@ -114,7 +114,7 @@ class SearchViewModel(
                             state.copy(
                                 searchSuggestions =
                                     result.copy(
-                                        recommendedItems = BlockedContent.filterItems(result.recommendedItems),
+                                        recommendedItems = BlockedContent.filterItems(result.recommendedItems).filterIsInstance<SongItem>(),
                                     ),
                             )
                         }
