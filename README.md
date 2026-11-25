@@ -1,6 +1,8 @@
 # Metrolist Android
 
-A Material YouTube Music client for Android, built with Kotlin and Jetpack Compose.
+A minimal Android client for YouTube song search, playback and lyrics, built with Kotlin and Jetpack Compose.
+
+The application exposes only song search, basic playback controls and the lyrics view. Desktop, iOS, library management, playlists, podcasts, social features, integrations and other secondary experiences are not part of this client.
 
 ## Build
 
