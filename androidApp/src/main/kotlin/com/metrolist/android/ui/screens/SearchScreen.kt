@@ -335,21 +335,10 @@ fun SearchScreen(
                 true
             }
 
-            is YouTubeUrlParser.ParsedUrl.Playlist -> {
-                searchViewModel.shared.resetSearch()
-                navigator.navigate(Screen.Playlist(parsed.id))
-                true
-            }
-
-            is YouTubeUrlParser.ParsedUrl.Album -> {
-                searchViewModel.shared.resetSearch()
-                navigator.navigate(Screen.Album(parsed.id))
-                true
-            }
-
+            is YouTubeUrlParser.ParsedUrl.Playlist,
+            is YouTubeUrlParser.ParsedUrl.Album,
             is YouTubeUrlParser.ParsedUrl.Artist -> {
                 searchViewModel.shared.resetSearch()
-                navigator.navigate(Screen.Artist(parsed.id))
                 true
             }
         }
@@ -490,46 +479,13 @@ fun SearchScreen(
                                     searchViewModel.shared.addPlayedSearchSong(item)
                                     playSong(item, playerConnection, scope)
                                 }
-
-                                is AlbumItem -> {
-                                    navigator.navigate(Screen.Album(item.id))
-                                }
-
-                                is ArtistItem -> {
-                                    CollectionPreviews.record(item)
-                                    navigator.navigate(Screen.Artist(item.id))
-                                }
-
-                                is PlaylistItem -> {
-                                    navigator.navigate(Screen.Playlist(item.id, thumbnailHint = item.thumbnail))
-                                }
-
-                                is PodcastItem -> {
-                                    navigator.navigate(Screen.Podcast(item.id))
-                                }
-
-                                is EpisodeItem -> {
-                                    playSong(item.toSongItem(), playerConnection, scope)
-                                }
-
-                                else -> {}
-                            }
-                        },
-                        onAlbumPlay = { album ->
-                            dismissKeyboardAndFocus()
-                            playerConnection?.playAlbum(album.id, album.title)
-                        },
-                        onItemLongClick = { item ->
-                            when (item) {
-                                is SongItem -> showSongMenu = item
-                                is AlbumItem -> showAlbumMenu = item
-                                is ArtistItem -> showArtistMenu = item
-                                is PlaylistItem -> showPlaylistMenu = item
-                                is PodcastItem -> showPodcastMenu = item
+                                is EpisodeItem -> playSong(item.toSongItem(), playerConnection, scope)
                                 else -> Unit
                             }
                         },
-                        onSongSave = { addToPlaylist(listOf(it)) },
+                        onAlbumPlay = null,
+                        onItemLongClick = {},
+                        onSongSave = {},
                         onHistoryItemClick = submitSearch,
                         onHistoryItemInsert = { historyItem ->
                             searchViewModel.shared.onQueryChange(historyItem)
@@ -548,41 +504,12 @@ fun SearchScreen(
                         currentSongId = currentSong?.id,
                         isPlaying = isPlaying,
                         contentPadding = PaddingValues(bottom = bottomOverlayInset + 24.dp),
-                        onArtistClick = { artistId ->
-                            dismissKeyboardAndFocus()
-                            navigator.navigate(Screen.Artist(artistId))
-                        },
-                        onAlbumClick = { albumId ->
-                            dismissKeyboardAndFocus()
-                            navigator.navigate(Screen.Album(albumId))
-                        },
-                        onShuffleClick = { item ->
-                            dismissKeyboardAndFocus()
-                            if (item is ArtistItem) {
-                                scope.launch {
-                                    GlobalYouTubeRepository.instance.getArtistSongs(item.id).takeIf { it.isNotEmpty() }?.let {
-                                        playerConnection?.shuffleQueue(it, item.title, songsOnly = true)
-                                    }
-                                }
-                            }
-                        },
-                        onMixClick = { item ->
-                            dismissKeyboardAndFocus()
-                            if (item is ArtistItem) {
-                                scope.launch {
-                                    GlobalYouTubeRepository.instance.startArtistRadio(item.id).takeIf { it.isNotEmpty() }?.let {
-                                        playerConnection?.playQueue(it, 0, "${item.title} Radio")
-                                    }
-                                }
-                            }
-                        },
+                        onArtistClick = null,
+                        onAlbumClick = null,
+                        onShuffleClick = {},
+                        onMixClick = {},
                         itemContainer = itemContainer,
-                        onMicrophoneClick =
-                            if (voiceSearchEnabled) {
-                                launchVoiceSearch
-                            } else {
-                                { navigator.navigate(Screen.Recognition) }
-                            },
+                        onMicrophoneClick = null,
                         focusRequester = focusRequester,
                         searchBarEndPadding = searchBarEndPadding,
                         modifier = Modifier.fillMaxSize(),
@@ -590,236 +517,8 @@ fun SearchScreen(
                 }
             }
 
-            AnimatedVisibility(
-                visible = !isQuerySubmitted && (isTv || showFloatingAction) && !isImeVisible,
-                enter = fadeIn() + slideInVertically { it / 2 },
-                exit = fadeOut() + slideOutVertically { it / 2 },
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = maxOf(imeBottomInset, floatingActionsBottomInset.value) + 16.dp),
-            ) {
-                FloatingActionButton(
-                    onClick = { navigator.navigate(Screen.Recognition) },
-                    shape = RoundedCornerShape(12.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    Icon(
-                        imageVector = MetrolistIcons.Outlined.AudioCapture,
-                        contentDescription = stringResource(Res.string.recognize_music),
-                    )
-                }
-            }
+            
         }
     }
 
-    PopupContent(showSongMenu) { selectedSong ->
-        val song = rememberSongWithAlbum(selectedSong)
-        SongMenu(
-            song = song,
-            isLiked = SongLikeState.isLiked(song.id),
-            onDismiss = { showSongMenu = null },
-            onPlayNext = { playerConnection?.addToQueue(song, playNext = true) },
-            onAddToQueue = { playerConnection?.addToQueue(song) },
-            onLike = { SongLikeState.toggleLike(song) },
-            onShare = {
-                val shareIntent =
-                    Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, ShareUrls.song(song.id))
-                    }
-                val chooser = Intent.createChooser(shareIntent, shareSongText)
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivitySafely(chooser)
-            },
-            onGoToAlbum = song.album?.id?.let { albumId -> { navigator.navigate(Screen.Album(albumId)) } },
-            onGoToArtist = { navigator.navigate(Screen.Artist(it)) },
-        )
-    }
-
-    PopupContent(showAlbumMenu) { album ->
-        AlbumMenu(
-            album = album,
-            onDismiss = { showAlbumMenu = null },
-            onPlay = {
-                showAlbumMenu = null
-                playerConnection?.playAlbum(album.id, album.title)
-            },
-            onAddToQueue = {
-                showAlbumMenu = null
-                scope.launch {
-                    playerConnection?.addToQueue(
-                        GlobalYouTubeRepository.instance
-                            .getAlbum(album.id)
-                            ?.songs
-                            .orEmpty(),
-                    )
-                }
-            },
-            onShare = {
-                showAlbumMenu = null
-                context.copyTextToClipboard(albumLinkText, ShareUrls.album(album.id))
-            },
-        )
-    }
-
-    showArtistMenu?.let { artist ->
-        ArtistContextMenu(
-            artist = artist,
-            onDismiss = { showArtistMenu = null },
-            onShuffleArtist = {
-                showArtistMenu = null
-                scope.launch {
-                    GlobalYouTubeRepository.instance.getArtistSongs(artist.id).takeIf { it.isNotEmpty() }?.let {
-                        playerConnection?.shuffleQueue(it, artist.title, songsOnly = true)
-                    }
-                }
-            },
-            onShare = {
-                showArtistMenu = null
-                context.copyTextToClipboard(artistLinkText, ShareUrls.artist(artist.id))
-            },
-        )
-    }
-
-    showPodcastMenu?.let { podcast ->
-        val sharePodcastText = stringResource(Res.string.share_podcast)
-        PodcastMenu(
-            podcast = podcast,
-            onDismiss = { showPodcastMenu = null },
-            onPlay = { withPodcastSongs(podcast) { playerConnection?.playQueue(it, queueTitle = podcast.title, finite = true) } },
-            onShuffle = { withPodcastSongs(podcast) { playerConnection?.shuffleQueue(it, podcast.title, finite = true) } },
-            onPlayNext = { withPodcastSongs(podcast) { playerConnection?.addToQueue(it, playNext = true) } },
-            onAddToQueue = { withPodcastSongs(podcast) { playerConnection?.addToQueue(it) } },
-            onShare = {
-                context.startActivitySafely(
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, ShareUrls.podcast(podcast.id))
-                        },
-                        sharePodcastText,
-                    ),
-                )
-            },
-        )
-    }
-
-    showPlaylistMenu?.let { playlist ->
-        PlaylistContextMenu(
-            playlist = playlist,
-            onDismiss = { showPlaylistMenu = null },
-            onPlayPlaylist = {
-                showPlaylistMenu = null
-                playerConnection?.playPlaylist(playlist.id, playlist.title)
-            },
-            onShufflePlaylist = {
-                showPlaylistMenu = null
-                playerConnection?.playPlaylist(playlist.id, playlist.title, shuffle = true)
-            },
-            onShare = {
-                showPlaylistMenu = null
-                context.copyTextToClipboard(
-                    playlistLinkText,
-                    ShareUrls.playlist(playlist.id),
-                )
-            },
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ArtistContextMenu(
-    artist: ArtistItem,
-    onDismiss: () -> Unit,
-    onShuffleArtist: () -> Unit,
-    onShare: () -> Unit,
-) {
-    ArtistMenu(
-        artist = artist,
-        onDismiss = onDismiss,
-        onShuffle = onShuffleArtist,
-        onShare = onShare,
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PlaylistContextMenu(
-    playlist: PlaylistItem,
-    onDismiss: () -> Unit,
-    onPlayPlaylist: () -> Unit,
-    onShufflePlaylist: () -> Unit,
-    onShare: () -> Unit,
-) {
-    val speedDialToggle = rememberSpeedDialToggle(playlist)
-    AdaptiveModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = playlist.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 8.dp),
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Material3MenuGroup(
-                items =
-                    listOf(
-                        Material3MenuItemData(
-                            icon = { Icon(MetrolistIcons.Filled.PlayArrow, contentDescription = null) },
-                            title = { Text(stringResource(Res.string.play_playlist)) },
-                            onClick = onPlayPlaylist,
-                        ),
-                        Material3MenuItemData(
-                            icon = { Icon(MetrolistIcons.Rounded.Shuffle, contentDescription = null) },
-                            title = { Text(stringResource(Res.string.shuffle_playlist)) },
-                            onClick = onShufflePlaylist,
-                        ),
-                        Material3MenuItemData(
-                            icon = { Icon(MetrolistIcons.Outlined.Share, contentDescription = null) },
-                            title = { Text(stringResource(Res.string.share)) },
-                            onClick = onShare,
-                        ),
-                        Material3MenuItemData(
-                            icon = {
-                                Icon(
-                                    if (speedDialToggle.isPinned) MetrolistIcons.Outlined.KeepOff else MetrolistIcons.Filled.PushPin,
-                                    contentDescription = null,
-                                )
-                            },
-                            title = {
-                                Text(
-                                    stringResource(
-                                        if (speedDialToggle.isPinned) {
-                                            Res.string.remove_from_speed_dial
-                                        } else {
-                                            Res.string.pin_to_speed_dial
-                                        },
-                                    ),
-                                )
-                            },
-                            onClick = {
-                                speedDialToggle.toggle()
-                                onDismiss()
-                            },
-                        ),
-                    ),
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-private fun Context.copyTextToClipboard(
-    label: String,
-    text: String,
-) {
-    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
 }
