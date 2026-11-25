@@ -1,4 +1,5 @@
 name: Build Android
+# Build and publish the minimal Android client artifact.
 
 on:
   pull_request:
