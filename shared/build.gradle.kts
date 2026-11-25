@@ -11,21 +11,16 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
-import org.gradle.api.tasks.testing.logging.TestExceptionFormat
-import org.gradle.jvm.tasks.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.jvm.toolchain.JvmVendorSpec
 import org.gradle.process.CommandLineArgumentProvider
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest
 import java.io.File
-import java.io.OutputStream
 import java.net.URI
 import java.util.Base64
 import java.util.Locale
 import java.util.Properties
-import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 plugins {
@@ -43,134 +38,12 @@ compose {
     }
 }
 
-configurations.matching { it.name.startsWith("desktop") }.configureEach {
-    exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
-}
-
-// Adoptium publishes no Windows ARM64 JDK 25; Microsoft's OpenJDK build is the one available there.
+// Use a JDK 25 toolchain for JVM-backed host tests.
 val jdkVendor =
     if (System.getProperty("os.name").startsWith("Windows") && System.getProperty("os.arch") == "aarch64") {
         JvmVendorSpec.MICROSOFT
     } else {
         JvmVendorSpec.ADOPTIUM
-    }
-
-val ffmpegVersion = "8.1.2-1.5.14"
-val javacppPlatform =
-    System.getProperty("org.bytedeco.javacpp.platform") ?: run {
-        val osName = System.getProperty("os.name").lowercase()
-        val osArch =
-            providers
-                .gradleProperty("metrolist.desktop.arch")
-                .orElse(System.getProperty("os.arch"))
-                .get()
-                .lowercase()
-        when {
-            osName.contains("mac") -> if (osArch == "aarch64" || osArch == "arm64") "macosx-arm64" else "macosx-x86_64"
-            osName.contains("win") -> if (osArch == "aarch64" || osArch == "arm64") "windows-arm64" else "windows-x86_64"
-            else -> if (osArch == "aarch64" || osArch == "arm64") "linux-arm64" else "linux-x86_64"
-        }
-    }
-val ffmpegNativeSource = configurations.create("ffmpegNativeSource") { isTransitive = false }
-// Bytedeco publishes no windows-arm64 natives; build its JNI libraries from the platform-neutral preset classes instead.
-val windowsArm64FfmpegClasspath =
-    if (javacppPlatform == "windows-arm64") {
-        configurations.create("windowsArm64FfmpegClasspath") { isTransitive = false }.also {
-            dependencies.add(it.name, "org.bytedeco:ffmpeg:$ffmpegVersion")
-            dependencies.add(it.name, "org.bytedeco:javacpp:${ffmpegVersion.substringAfter('-')}")
-        }
-    } else {
-        dependencies.add(ffmpegNativeSource.name, "org.bytedeco:ffmpeg:$ffmpegVersion:$javacppPlatform")
-        null
-    }
-val ffmpegNativeSourceJar = ffmpegNativeSource.elements.map { it.single().asFile }
-
-interface ArchiveOps {
-    @get:Inject
-    val archiveOperations: ArchiveOperations
-}
-val archiveOps = objects.newInstance<ArchiveOps>().archiveOperations
-val windowsArm64FfmpegNatives =
-    windowsArm64FfmpegClasspath?.incoming?.files?.let { classpath ->
-        val java =
-            extensions.getByType<JavaToolchainService>().launcherFor {
-                languageVersion.set(JavaLanguageVersion.of(25))
-                vendor.set(jdkVendor)
-            }
-        tasks.register<Exec>("buildWindowsArm64Ffmpeg") {
-            val output = layout.buildDirectory.dir("generated/windows-arm64-ffmpeg")
-            inputs.file(rootProject.file("scripts/build_windows_arm64_ffmpeg.ps1")).withPathSensitivity(PathSensitivity.RELATIVE)
-            inputs.files(classpath).withNormalizer(ClasspathNormalizer::class.java)
-            inputs.property("javaVersion", 25)
-            outputs.dir(output)
-            // The natives depend only on pinned inputs; the build cache skips about a minute of MSVC work.
-            outputs.cacheIf { true }
-            // Project-relative arguments keep the cache key independent of the checkout path.
-            workingDir(rootProject.projectDir)
-            commandLine(
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                "scripts/build_windows_arm64_ffmpeg.ps1",
-                "-Output",
-                output
-                    .get()
-                    .asFile
-                    .relativeTo(rootProject.projectDir)
-                    .path,
-            )
-            doFirst {
-                environment(
-                    "METROLIST_FFMPEG_JAVA",
-                    java
-                        .get()
-                        .executablePath.asFile.absolutePath,
-                )
-                environment("METROLIST_FFMPEG_CLASSPATH", classpath.asPath)
-            }
-        }
-    }
-val desktopFfmpegNatives =
-    tasks.register<Jar>("desktopFfmpegNatives") {
-        // JavaCPP caches natives by JAR name; keep old cached audio libraries out of the new extraction directory.
-        val audioSuffix = if (javacppPlatform.startsWith("linux-")) "-system-audio" else ""
-        archiveFileName.set("ffmpeg-$ffmpegVersion-$javacppPlatform$audioSuffix.jar")
-        destinationDirectory.set(layout.buildDirectory.dir("platform-libs"))
-        isPreserveFileTimestamps = false
-        isReproducibleFileOrder = true
-        manifest.attributes["Multi-Release"] = "true"
-        if (windowsArm64FfmpegNatives != null) {
-            from(windowsArm64FfmpegNatives)
-        } else {
-            from(ffmpegNativeSourceJar.map(archiveOps::zipTree)) {
-                exclude("META-INF/MANIFEST.MF", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
-                exclude("**/ffmpeg", "**/ffmpeg.exe", "**/ffprobe", "**/ffprobe.exe")
-                exclude("META-INF/native-image/**/ffmpeg/**", "META-INF/native-image/**/ffprobe/**")
-                if (javacppPlatform.startsWith("linux-")) {
-                    // Host ALSA and audio-server libraries must use the host's configuration and plugins.
-                    exclude("**/libasound.so*", "**/libpulse*.so*", "**/libjack*.so*", "**/libpipewire-*.so*", "**/libspa-*.so*")
-                }
-            }
-        }
-    }
-
-val icu4jSource = configurations.create("icu4jSource") { isTransitive = false }
-dependencies.add(icu4jSource.name, "com.ibm.icu:icu4j:79.1")
-val icu4jSourceJar = icu4jSource.elements.map { it.single().asFile }
-val desktopIcu4j =
-    tasks.register<Jar>("desktopIcu4j") {
-        archiveFileName.set("icu4j-79.1-relative-dates.jar")
-        destinationDirectory.set(layout.buildDirectory.dir("platform-libs"))
-        isPreserveFileTimestamps = false
-        isReproducibleFileOrder = true
-        from(icu4jSourceJar.map(archiveOps::zipTree)) {
-            exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
-            val data = "com/ibm/icu/impl/data/icudata"
-            listOf("brkitr", "coll", "lang", "rbnf", "region", "translit", "unit", "zone").forEach { exclude("$data/$it/**") }
-            listOf("unames.icu", "zoneinfo64.res", "uts46.nrm", "confusables*.cfu", "*.spp", "nfkc*.nrm").forEach { exclude("$data/$it") }
-        }
     }
 
 abstract class GenerateRoomMigrationTestSchemas : DefaultTask() {
@@ -294,24 +167,6 @@ kotlin {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
     }
 
-    jvm("desktop") {
-        compilerOptions.jvmTarget.set(JvmTarget.JVM_21)
-    }
-
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64(),
-    ).forEach { iosTarget ->
-        iosTarget.compilations.getByName("main").cinterops.create("playbackObservation") {
-            definitionFile.set(project.file("src/iosMain/cinterop/playbackObservation.def"))
-        }
-        iosTarget.binaries.framework {
-            baseName = "Shared"
-            isStatic = true
-            freeCompilerArgs += "-Xadd-light-debug=enable"
-        }
-    }
-
     jvmToolchain {
         languageVersion.set(JavaLanguageVersion.of(25))
         vendor.set(jdkVendor)
@@ -424,41 +279,6 @@ kotlin {
                 implementation(libs.media3.datasource)
             }
         }
-        getByName("desktopMain") {
-            dependsOn(jvmSharedMain)
-            dependencies {
-                implementation(libs.compose.desktop)
-                implementation(files(desktopIcu4j))
-                implementation(libs.room.runtime)
-                implementation(libs.sqlite.jdbc)
-                implementation(libs.ktor.client.okhttp)
-                implementation(libs.ktor.server.cio)
-                implementation(libs.ktor.server.websockets)
-                implementation(libs.jna)
-                implementation(libs.jna.platform)
-                implementation(libs.jmdns)
-                api("org.bytedeco:ffmpeg:$ffmpegVersion")
-                implementation(files(desktopFfmpegNatives))
-            }
-        }
-        getByName("desktopTest") {
-            dependsOn(jvmSharedTest)
-            dependencies {
-                implementation(libs.coil.network.okhttp)
-                implementation(libs.junit4)
-                implementation(libs.ktor.client.cio)
-            }
-        }
-        getByName("iosMain") {
-            dependencies {
-                implementation("io.coil-kt.coil3:coil-network-ktor3:${libs.versions.coil.get()}") {
-                    exclude(group = "org.jetbrains.skiko", module = "skiko")
-                }
-                implementation(libs.ktor.client.darwin)
-                implementation(libs.sqlite.bundled)
-                implementation("no.synth:kmp-zip:2.1.0")
-            }
-        }
     }
 
     targets.all {
@@ -470,28 +290,6 @@ kotlin {
             }
         }
     }
-}
-
-val reflectionFreeTestSuites =
-    listOf("*LocalDeviceServerTest", "*DeviceConnectManagerIntegrationTest", "*ListenTogetherManagerLifecycleTest")
-
-tasks.named<Test>("desktopTest") {
-    filter { reflectionFreeTestSuites.forEach(::excludeTestsMatching) }
-    systemProperty("metrolist.test.withoutReflection", "true")
-    systemProperty("io.ktor.development", "true")
-    // Track opt-in flags so cached test environments cannot silently enable or skip LAN tests.
-    listOf("METROLIST_MEASURE_DISCOVERY", "METROLIST_TEST_IPV6_DISCOVERY").forEach { flag ->
-        val value = providers.environmentVariable(flag).orElse("0")
-        inputs.property(flag, value)
-        environment(flag, value.get())
-    }
-    environment(
-        "XDG_DATA_HOME",
-        layout.buildDirectory
-            .dir("test-data/xdg")
-            .get()
-            .asFile.absolutePath,
-    )
 }
 
 val prepareComposeResourceAliases =
@@ -665,9 +463,6 @@ kotlin {
 dependencies {
     add("androidRuntimeClasspath", libs.ui.tooling)
     add("kspAndroid", libs.room.compiler)
-    add("kspDesktop", libs.room.compiler)
-    add("kspIosArm64", libs.room.compiler)
-    add("kspIosSimulatorArm64", libs.room.compiler)
 }
 
 class RoomSchemaArgProvider(
@@ -851,12 +646,6 @@ val signedOutProbeVideoId =
 
 val javaToolchainService = extensions.getByType<JavaToolchainService>()
 
-tasks.withType<KotlinNativeSimulatorTest>().configureEach {
-    // AVFoundation needs the media services of a booted simulator.
-    standalone.set(false)
-    testLogging.exceptionFormat = TestExceptionFormat.FULL
-}
-
 tasks.withType<Test>().configureEach {
     jvmArgs("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow")
     javaLauncher.set(
@@ -958,83 +747,5 @@ tasks.withType<Test>().configureEach {
         outputs.upToDateWhen { false }
         outputs.cacheIf { false }
         testLogging.showStandardStreams = true
-    }
-}
-
-val testServerWithoutReflection =
-    tasks.register<Test>("testServerWithoutReflection") {
-        group = "verification"
-        description = "Runs server integration tests on the reflection-free desktop runtime."
-        val desktopTest = tasks.named<Test>("desktopTest").get()
-        testClassesDirs = desktopTest.testClassesDirs
-        classpath = desktopTest.classpath
-        environment(
-            "XDG_DATA_HOME",
-            layout.buildDirectory
-                .dir("test-data/no-reflect/xdg")
-                .get()
-                .asFile.absolutePath,
-        )
-        systemProperty("metrolist.test.withoutReflection", "true")
-        systemProperty("io.ktor.development", "true")
-        filter {
-            reflectionFreeTestSuites.forEach(::includeTestsMatching)
-        }
-    }
-tasks.named("desktopTest") { dependsOn(testServerWithoutReflection) }
-
-val desktopJar = tasks.named<Jar>("desktopJar")
-val desktopClasses = layout.buildDirectory.dir("classes/kotlin/desktop/main")
-
-tasks.register("verifyDesktopJarIntegrity") {
-    group = "verification"
-    description = "Verifies shared desktop classes, license resources and the absence of retired romanization assets."
-    dependsOn(desktopJar)
-    inputs.file(desktopJar.flatMap { it.archiveFile })
-    inputs.dir(desktopClasses)
-    val licenseDirectory = layout.projectDirectory.dir("src/commonMain/composeResources/files/licenses/glyphmind").asFile
-    inputs.dir(licenseDirectory)
-
-    doLast {
-        val jarFile = inputs.files.files.single { it.isFile && it.extension == "jar" }
-        val classesDirectory = jarFile.parentFile.parentFile.resolve("classes/kotlin/desktop/main")
-        val compiledClasses =
-            classesDirectory
-                .walkTopDown()
-                .filter { it.isFile && it.extension == "class" }
-                .map { it.relativeTo(classesDirectory).invariantSeparatorsPath }
-                .toSet()
-        if (compiledClasses.isEmpty()) {
-            throw GradleException("Shared desktop compilation produced no classes at ${classesDirectory.absolutePath}")
-        }
-
-        ZipFile(jarFile).use { archive ->
-            val entries = archive.entries().asSequence().toList()
-            val entryNames = entries.mapTo(mutableSetOf()) { it.name }
-            check(entryNames.none { it == "romanization/mandarin.bin" || it.startsWith("com/atilika/kuromoji/") }) {
-                "Shared desktop JAR contains retired romanization assets"
-            }
-            val notice = licenseDirectory.resolve("NOTICE.md").readText()
-            val referencedLicenses = Regex("`(licenses/[^`]+)`").findAll(notice).map { it.groupValues[1] }.toList() + "LICENSE"
-            check(referencedLicenses.all { licenseDirectory.resolve(it).isFile }) { "Glyphmind NOTICE references missing license files" }
-            val resourcePrefix = "composeResources/com.metrolist.shared.generated.resources/files/licenses/glyphmind/"
-            val missingLicenses =
-                licenseDirectory
-                    .walkTopDown()
-                    .filter { it.isFile }
-                    .map { it.relativeTo(licenseDirectory).invariantSeparatorsPath }
-                    .filter { "$resourcePrefix$it" !in entryNames }
-                    .toList()
-            check(missingLicenses.isEmpty()) { "Shared desktop JAR is missing glyphmind license resources: $missingLicenses" }
-            val missingClasses = compiledClasses - entryNames
-            if (missingClasses.isNotEmpty()) {
-                throw GradleException(
-                    "Shared desktop JAR is incomplete (${jarFile.absolutePath}); missing ${missingClasses.size} compiled classes",
-                )
-            }
-            entries.filterNot { it.isDirectory }.forEach { entry ->
-                archive.getInputStream(entry).use { it.copyTo(OutputStream.nullOutputStream()) }
-            }
-        }
     }
 }
