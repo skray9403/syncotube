@@ -109,10 +109,8 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
-import com.metrolist.android.LocalListenTogetherManager
 import com.metrolist.android.LocalPlaylistAdder
 import com.metrolist.android.playback.LocalPlayerConnection
-import com.metrolist.android.ui.player.MusicVideoSurface
 import com.metrolist.android.ui.theme.PlayerColorExtractor
 import com.metrolist.shared.constants.MiniPlayerHeight
 import com.metrolist.shared.constants.ModernMiniPlayerHorizontalPadding
@@ -121,15 +119,12 @@ import com.metrolist.shared.db.MusicDatabase
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.error_occurred
 import com.metrolist.shared.generated.resources.loading
-import com.metrolist.shared.generated.resources.mute
 import com.metrolist.shared.generated.resources.next
 import com.metrolist.shared.generated.resources.pause
 import com.metrolist.shared.generated.resources.play
 import com.metrolist.shared.generated.resources.previous
 import com.metrolist.shared.generated.resources.subscribed_to_artist
 import com.metrolist.shared.generated.resources.unknown
-import com.metrolist.shared.generated.resources.unmute
-import com.metrolist.shared.listentogether.ListenTogetherRoomRole
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.isLive
 import com.metrolist.shared.model.previewThumbnailUrl
@@ -142,7 +137,6 @@ import com.metrolist.shared.state.SongLikeState
 import com.metrolist.shared.state.SongMetadataState
 import com.metrolist.shared.state.rememberArtistSubscription
 import com.metrolist.shared.state.toggleArtistSubscription
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.BlurredArtworkBackground
 import com.metrolist.shared.ui.components.BottomSheetState
 import com.metrolist.shared.ui.components.ContainedLoadingIndicator
@@ -161,8 +155,6 @@ import com.metrolist.shared.ui.haptics.HapticEvent
 import com.metrolist.shared.ui.haptics.MetrolistHaptics
 import com.metrolist.shared.ui.haptics.rememberMetrolistHaptics
 import com.metrolist.shared.ui.icons.MetrolistIcons
-import com.metrolist.shared.ui.player.shouldShowMusicVideoSurface
-import com.metrolist.shared.ui.tv.tvFocusHighlight
 import com.metrolist.shared.ui.utils.nativeBlurCompat
 import com.metrolist.shared.ui.utils.supportsNativeBlur
 import kotlinx.coroutines.CancellationException
@@ -193,14 +185,6 @@ fun MiniPlayer(
 
     val currentSong by playerConnection.currentSong.collectAsState(initial = null)
     val isPlaying by playerConnection.isPlaying.collectAsState(initial = false)
-    val volume by playerConnection.volume.collectAsState(initial = 1f)
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRole by listenTogetherManager?.role?.collectAsState()
-        ?: remember { mutableStateOf(ListenTogetherRoomRole.NONE) }
-    val isInListenTogetherRoom by listenTogetherManager?.isInRoom?.collectAsState()
-        ?: remember { mutableStateOf(false) }
-    val isListenTogetherGuest = isInListenTogetherRoom && listenTogetherRole == ListenTogetherRoomRole.GUEST
-    val isMuted = volume <= 0.01f
     val isPlaybackLoading by playerConnection.isPlaybackLoading.collectAsState(initial = false)
     val playbackResource by playerConnection.currentPlaybackResource.collectAsState(initial = null)
     val isLive = currentSong?.isLive == true || playbackResource?.isLive == true
@@ -277,8 +261,6 @@ fun MiniPlayer(
     val canSkipNext by playerConnection.canSkipNext.collectAsState(initial = false)
     val canSkipPrevious by playerConnection.canSkipPrevious.collectAsState(initial = false)
     val crossfadeState = if (miniPlayerActive) playerConnection.crossfadeState.collectAsState() else remember { mutableStateOf(null) }
-    val isVideoModeActive by playerConnection.isVideoModeActive.collectAsState()
-    val isVideoViewerVisible by playerConnection.isVideoViewerVisible.collectAsState()
 
     if (currentSong == null) return
     val metadataRevision by SongMetadataState.revision.collectAsState()
@@ -367,8 +349,8 @@ fun MiniPlayer(
                     },
                     onResetDragOffset = ::resetDragOffset,
                     swipeThreshold = swipeThreshold,
-                    canSkipNext = canSkipNext && !isListenTogetherGuest,
-                    canSkipPrevious = canSkipPrevious && !isListenTogetherGuest,
+                    canSkipNext = canSkipNext,
+                    canSkipPrevious = canSkipPrevious,
                     onSkipNext = { playerConnection.skipToNext() },
                     onSkipPrevious = { playerConnection.skipToPrevious() },
                 ),
@@ -393,11 +375,7 @@ fun MiniPlayer(
                 active = miniPlayerActive,
                 onTogglePlay = {
                     hapticManager.perform(HapticEvent.PRESS)
-                    if (isListenTogetherGuest) {
-                        playerConnection.setVolume(if (volume > 0.01f) 0f else 1f)
-                    } else {
-                        playerConnection.togglePlayPause()
-                    }
+                    playerConnection.togglePlayPause()
                 },
                 onSkipNext = {
                     hapticManager.perform(HapticEvent.PRESS)
@@ -408,34 +386,21 @@ fun MiniPlayer(
                     hapticManager.perform(HapticEvent.PRESS)
                     onExpand()
                 },
-                canSkipNext = canSkipNext && !isListenTogetherGuest,
-                canSkipPrevious = canSkipPrevious && !isListenTogetherGuest,
+                canSkipNext = canSkipNext,
+                canSkipPrevious = canSkipPrevious,
                 playbackEnabled = true,
                 swipeThresholdPx = swipeThreshold,
                 isVisible = true,
                 modifier =
                     Modifier
                         .then(if (cardFocusRequester != null) Modifier.focusRequester(cardFocusRequester) else Modifier)
-                        .tvFocusHighlight(scale = 1f)
                         .graphicsLayer { translationX = dragOffset.value.x },
                 onDpadExpand = {
                     hapticManager.perform(HapticEvent.PRESS)
                     onDpadExpand()
                 },
-                playbackActionLabel =
-                    if (isListenTogetherGuest) {
-                        stringResource(
-                            if (isMuted) Res.string.unmute else Res.string.mute,
-                        )
-                    } else {
-                        null
-                    },
-                playbackActionIcon =
-                    if (isListenTogetherGuest) {
-                        if (isMuted) MetrolistIcons.AutoMirrored.Filled.VolumeUp else MetrolistIcons.AutoMirrored.Filled.VolumeOff
-                    } else {
-                        null
-                    },
+                playbackActionLabel = null,
+                playbackActionIcon = null,
                 swipeEnabled = false,
                 progress = { progress.value },
                 progressAvailable = !isLive && duration > 0L,
@@ -488,36 +453,20 @@ fun MiniPlayer(
                 onDpadExpand()
             },
             onTogglePlayPause = {
-                hapticManager.toggle(if (isListenTogetherGuest) isMuted else !isPlaying)
-                if (isListenTogetherGuest) {
-                    playerConnection.setVolume(if (volume > 0.01f) 0f else 1f)
-                } else {
-                    playerConnection.togglePlayPause()
-                }
+                hapticManager.toggle(!isPlaying)
+                playerConnection.togglePlayPause()
             },
-            canSkipPrevious = canSkipPrevious && !isListenTogetherGuest,
+            canSkipPrevious = canSkipPrevious,
             onSkipPrevious = { playerConnection.skipToPrevious() },
-            canSkipNext = canSkipNext && !isListenTogetherGuest,
+            canSkipNext = canSkipNext,
             onSkipNext = {
                 hapticManager.perform(HapticEvent.PRESS)
                 playerConnection.skipToNext()
             },
-            isListenTogetherGuest = isListenTogetherGuest,
-            isMuted = isMuted,
             onLike = { songId ->
                 hapticManager.toggle(!SongLikeState.isLiked(songId))
                 SongLikeState.toggleLike(song)
             },
-            videoPlayer = playerConnection.videoPlayer,
-            showVideo =
-                shouldShowMusicVideoSurface(
-                    isVideoModeActive = isVideoModeActive,
-                    isVideoViewerVisible = isVideoViewerVisible,
-                    hasVideo = playbackResource?.hasVideo == true,
-                    presentationAllowed =
-                        Settings.shared.playVideosInMiniPlayer &&
-                            miniPlayerActive,
-                ),
             focusRequester = cardFocusRequester,
         )
     }
@@ -624,17 +573,12 @@ internal fun MiniPlayerCard(
     onTogglePlayPause: () -> Unit,
     canSkipNext: Boolean,
     onSkipNext: () -> Unit,
-    isListenTogetherGuest: Boolean,
-    isMuted: Boolean,
     onLike: (songId: String) -> Unit,
-    videoPlayer: androidx.media3.common.Player?,
-    showVideo: Boolean,
     focusRequester: FocusRequester?,
 ) {
     val miniPlayerBlurRadiusPx = with(LocalDensity.current) { 60.dp.toPx() }
     val previousLabel = stringResource(Res.string.previous)
     val nextLabel = stringResource(Res.string.next)
-    val isTv = LocalIsTv.current
     val artworkUrl = currentSong.previewThumbnailUrl
     val useBlurMiniPlayer =
         Settings.shared.miniPlayerBackgroundStyle == "BLURRED_ARTWORK" && artworkUrl != null
@@ -702,8 +646,7 @@ internal fun MiniPlayerCard(
                     scaleX = animatedScale.value
                     scaleY = animatedScale.value
                 }.clip(RoundedCornerShape(cornerRadius))
-                .then(if (!isTv && focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .focusProperties { canFocus = !isTv }
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .testTag("mini_player_card")
                 .focusOutline(RoundedCornerShape(cornerRadius), borderWidth = 4.dp)
                 .semantics { selected = isFocused }
@@ -819,15 +762,7 @@ internal fun MiniPlayerCard(
                 useDesktopLayout = useDesktopLayout,
                 active = active,
                 isLive = isLive,
-                metadataModifier =
-                    if (isTv) {
-                        Modifier
-                            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                            .tvFocusHighlight(scale = 1f)
-                            .clickable(onClick = onDpadExpand)
-                    } else {
-                        Modifier
-                    },
+                metadataModifier = Modifier,
                 currentSong = currentSong,
                 marqueeModifier = marqueeModifier,
                 artworkUrl = artworkUrl,
@@ -844,8 +779,6 @@ internal fun MiniPlayerCard(
                 onTogglePlayPause = onTogglePlayPause,
                 canSkipNext = canSkipNext,
                 onSkipNext = onSkipNext,
-                isListenTogetherGuest = isListenTogetherGuest,
-                isMuted = isMuted,
                 onLike = onLike,
                 onAddToPlaylist = { addToPlaylist(listOf(currentSong)) },
                 artistId = subscribeArtistId,
@@ -869,8 +802,6 @@ internal fun MiniPlayerCard(
                     } else {
                         null
                     },
-                videoPlayer = videoPlayer,
-                showVideo = showVideo,
             )
 
             if (!isModern && !useDesktopLayout) {
@@ -927,23 +858,19 @@ private fun MiniPlayerContent(
     onTogglePlayPause: () -> Unit,
     canSkipNext: Boolean,
     onSkipNext: () -> Unit,
-    isListenTogetherGuest: Boolean,
-    isMuted: Boolean,
     onLike: (songId: String) -> Unit,
     onAddToPlaylist: () -> Unit,
     artistId: String?,
     isArtistSubscribed: Boolean,
     onSubscribeToggle: (() -> Unit)?,
-    videoPlayer: androidx.media3.common.Player?,
-    showVideo: Boolean,
 ) {
     if (useDesktopLayout) {
         DesktopMiniPlayerContent(
             song = currentSong,
             isPlaying = isPlaying,
             isLoading = isPlaybackLoading,
-            isGuest = isListenTogetherGuest,
-            isMuted = isMuted,
+            isGuest = false,
+            isMuted = false,
             active = active,
             onTogglePlayPause = onTogglePlayPause,
             marqueeModifier = marqueeModifier,
@@ -951,25 +878,15 @@ private fun MiniPlayerContent(
             secondaryContentColor = secondaryContentColor,
             modifier = modifier,
             artwork = {
-                if (showVideo) {
-                    MusicVideoSurface(
-                        player = videoPlayer,
-                        artworkUrl = artworkUrl,
-                        fillContainer = true,
-                        showControls = false,
-                        modifier = Modifier.size(48.dp),
-                    )
-                } else {
-                    CrossfadeArtwork(
-                        currentUrl = artworkUrl,
-                        nextUrl = nextArtworkUrl,
-                        progress = artworkCrossfadeProgress,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
-                        animate = active,
-                    )
-                }
+                CrossfadeArtwork(
+                    currentUrl = artworkUrl,
+                    nextUrl = nextArtworkUrl,
+                    progress = artworkCrossfadeProgress,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                    animate = active,
+                )
             },
             actions = {
                 MiniPlayerActions(
@@ -1001,15 +918,11 @@ private fun MiniPlayerContent(
             secondaryContentColor = secondaryContentColor,
             buttonBorderColor = buttonBorderColor,
             onTogglePlayPause = onTogglePlayPause,
-            isListenTogetherGuest = isListenTogetherGuest,
-            isMuted = isMuted,
             onLike = onLike,
             onAddToPlaylist = onAddToPlaylist,
             artistId = artistId,
             isArtistSubscribed = isArtistSubscribed,
             onSubscribeToggle = onSubscribeToggle,
-            videoPlayer = videoPlayer,
-            showVideo = showVideo,
         )
     } else {
         VintageMiniPlayerContent(
@@ -1028,10 +941,6 @@ private fun MiniPlayerContent(
             onTogglePlayPause = onTogglePlayPause,
             canSkipNext = canSkipNext,
             onSkipNext = onSkipNext,
-            isListenTogetherGuest = isListenTogetherGuest,
-            isMuted = isMuted,
-            videoPlayer = videoPlayer,
-            showVideo = showVideo,
         )
     }
 }
@@ -1054,15 +963,11 @@ private fun ModernMiniPlayerContent(
     secondaryContentColor: Color,
     buttonBorderColor: Color,
     onTogglePlayPause: () -> Unit,
-    isListenTogetherGuest: Boolean,
-    isMuted: Boolean,
     onLike: (songId: String) -> Unit,
     onAddToPlaylist: () -> Unit,
     artistId: String?,
     isArtistSubscribed: Boolean,
     onSubscribeToggle: (() -> Unit)?,
-    videoPlayer: androidx.media3.common.Player?,
-    showVideo: Boolean,
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
 
@@ -1082,10 +987,6 @@ private fun ModernMiniPlayerContent(
             thumbnailUrl = artworkUrl,
             nextThumbnailUrl = nextArtworkUrl,
             artworkCrossfadeProgress = artworkCrossfadeProgress,
-            videoPlayer = videoPlayer,
-            showVideo = showVideo,
-            isListenTogetherGuest = isListenTogetherGuest,
-            isMuted = isMuted,
             primaryColor = primaryColor,
             outlineColor = buttonBorderColor,
             onClick = onTogglePlayPause,
@@ -1160,10 +1061,6 @@ private fun VintageMiniPlayerContent(
     onTogglePlayPause: () -> Unit,
     canSkipNext: Boolean,
     onSkipNext: () -> Unit,
-    isListenTogetherGuest: Boolean,
-    isMuted: Boolean,
-    videoPlayer: androidx.media3.common.Player?,
-    showVideo: Boolean,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1179,24 +1076,14 @@ private fun VintageMiniPlayerContent(
                     .size(44.dp)
                     .clip(RoundedCornerShape(8.dp)),
         ) {
-            if (showVideo) {
-                MusicVideoSurface(
-                    player = videoPlayer,
-                    artworkUrl = artworkUrl,
-                    modifier = Modifier.fillMaxSize(),
-                    cornerRadius = 8.dp,
-                    fillContainer = true,
-                )
-            } else {
-                CrossfadeArtwork(
-                    currentUrl = artworkUrl,
-                    nextUrl = nextArtworkUrl,
-                    progress = artworkCrossfadeProgress,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            CrossfadeArtwork(
+                currentUrl = artworkUrl,
+                nextUrl = nextArtworkUrl,
+                progress = artworkCrossfadeProgress,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -1234,7 +1121,7 @@ private fun VintageMiniPlayerContent(
 
         IconButton(
             onClick = onTogglePlayPause,
-            modifier = Modifier.testTag("mini_player_play").tvFocusHighlight(CircleShape, scale = 1f),
+            modifier = Modifier.testTag("mini_player_play"),
             shapes = IconButtonDefaults.shapes(),
         ) {
             if (isPlaybackLoading) {
@@ -1246,19 +1133,17 @@ private fun VintageMiniPlayerContent(
             } else {
                 Icon(
                     imageVector =
-                        when {
-                            isListenTogetherGuest && isMuted -> MetrolistIcons.AutoMirrored.Filled.VolumeUp
-                            isListenTogetherGuest -> MetrolistIcons.AutoMirrored.Filled.VolumeOff
-                            isPlaying -> MetrolistIcons.Rounded.Pause
-                            else -> MetrolistIcons.Rounded.PlayArrow
+                        if (isPlaying) {
+                            MetrolistIcons.Rounded.Pause
+                        } else {
+                            MetrolistIcons.Rounded.PlayArrow
                         },
                     contentDescription =
                         stringResource(
-                            when {
-                                isListenTogetherGuest && isMuted -> Res.string.unmute
-                                isListenTogetherGuest -> Res.string.mute
-                                isPlaying -> Res.string.pause
-                                else -> Res.string.play
+                            if (isPlaying) {
+                                Res.string.pause
+                            } else {
+                                Res.string.play
                             },
                         ),
                     modifier = Modifier.size(28.dp),
@@ -1277,7 +1162,7 @@ private fun VintageMiniPlayerContent(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 ),
-            modifier = Modifier.testTag("mini_player_skip_next").tvFocusHighlight(CircleShape, scale = 1f),
+            modifier = Modifier.testTag("mini_player_skip_next"),
             shapes = IconButtonDefaults.shapes(),
         ) {
             Icon(
@@ -1292,8 +1177,6 @@ private fun VintageMiniPlayerContent(
 @Composable
 private fun PlayButtonWithProgress(
     isPlaying: Boolean,
-    isListenTogetherGuest: Boolean,
-    isMuted: Boolean,
     isLoading: Boolean,
     progress: () -> Float,
     thumbnailUrl: String?,
@@ -1303,16 +1186,13 @@ private fun PlayButtonWithProgress(
     outlineColor: Color,
     onClick: () -> Unit,
     arcAlpha: State<Float>,
-    videoPlayer: androidx.media3.common.Player?,
-    showVideo: Boolean,
 ) {
     val actionLabel =
         stringResource(
-            when {
-                isListenTogetherGuest && isMuted -> Res.string.unmute
-                isListenTogetherGuest -> Res.string.mute
-                isPlaying -> Res.string.pause
-                else -> Res.string.play
+            if (isPlaying) {
+                Res.string.pause
+            } else {
+                Res.string.play
             },
         )
     val trackColor = outlineColor.copy(alpha = 0.2f)
@@ -1357,35 +1237,24 @@ private fun PlayButtonWithProgress(
                     .size(40.dp)
                     .clip(CircleShape)
                     .testTag("mini_player_play")
-                    .tvFocusHighlight(CircleShape, scale = 1.08f, borderWidth = 4.dp)
                     .semantics { contentDescription = actionLabel }
                     .clickable(role = Role.Button, onClick = onClick),
         ) {
-            if (showVideo) {
-                MusicVideoSurface(
-                    player = videoPlayer,
-                    artworkUrl = thumbnailUrl,
-                    modifier = Modifier.fillMaxSize(),
-                    cornerRadius = 18.dp,
-                    fillContainer = true,
-                )
-            } else {
-                CrossfadeArtwork(
-                    currentUrl = thumbnailUrl,
-                    nextUrl = nextThumbnailUrl,
-                    progress = artworkCrossfadeProgress,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            CrossfadeArtwork(
+                currentUrl = thumbnailUrl,
+                nextUrl = nextThumbnailUrl,
+                progress = artworkCrossfadeProgress,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
 
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f), CircleShape),
                 )
                 ContainedLoadingIndicator(Modifier.size(32.dp))
-            } else if (isListenTogetherGuest || !isPlaying) {
+            } else if (!isPlaying) {
                 Box(
                     modifier =
                         Modifier
@@ -1393,16 +1262,7 @@ private fun PlayButtonWithProgress(
                             .background(Color.Black.copy(alpha = 0.4f), CircleShape),
                 )
                 Icon(
-                    imageVector =
-                        if (isListenTogetherGuest) {
-                            if (isMuted) {
-                                MetrolistIcons.AutoMirrored.Filled.VolumeUp
-                            } else {
-                                MetrolistIcons.AutoMirrored.Filled.VolumeOff
-                            }
-                        } else {
-                            MetrolistIcons.Outlined.PlayArrow
-                        },
+                    imageVector = MetrolistIcons.Outlined.PlayArrow,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(20.dp),

@@ -123,6 +123,8 @@ data class SharedSettingsHost(
     val isAudioProcessingAvailable: Boolean = true,
     val playbackSpeedOverride: Float? = null,
     val playbackSpeedDescription: String? = null,
+    val supportsMusicVideo: Boolean = true,
+    val supportsVoiceSearch: Boolean = true,
     val homeSections: List<SettingsHomeSection> = emptyList(),
     val onHomeSectionVisibilityChanged: (String, Boolean) -> Unit = { _, _ -> },
     val fontPrimaryActions: List<SettingsHostAction> = emptyList(),

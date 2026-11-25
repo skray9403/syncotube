@@ -54,24 +54,15 @@ import coil3.imageLoader
 import com.metrolist.android.R
 import com.metrolist.android.playback.AudioCacheManager
 import com.metrolist.android.playback.SongDownloadManager
-import com.metrolist.android.ui.player.CanvasCache
-import com.metrolist.shared.api.artwork.AnimatedArtworkService
-import com.metrolist.shared.api.musicvideo.MusicVideoResolver
 import com.metrolist.shared.generated.resources.Res
-import com.metrolist.shared.generated.resources.animated_artwork_cache
 import com.metrolist.shared.generated.resources.cache_size_warning_message
 import com.metrolist.shared.generated.resources.cache_size_warning_title
 import com.metrolist.shared.generated.resources.calculating
 import com.metrolist.shared.generated.resources.change_folder
 import com.metrolist.shared.generated.resources.clear_all_downloads
 import com.metrolist.shared.generated.resources.clear_all_downloads_dialog
-import com.metrolist.shared.generated.resources.clear_animated_artwork_cache
-import com.metrolist.shared.generated.resources.clear_animated_artwork_cache_dialog
 import com.metrolist.shared.generated.resources.clear_image_cache
 import com.metrolist.shared.generated.resources.clear_image_cache_dialog
-import com.metrolist.shared.generated.resources.clear_music_video_cache
-import com.metrolist.shared.generated.resources.clear_music_video_cache_desc
-import com.metrolist.shared.generated.resources.clear_music_video_cache_dialog
 import com.metrolist.shared.generated.resources.clear_song_cache
 import com.metrolist.shared.generated.resources.clear_song_cache_dialog
 import com.metrolist.shared.generated.resources.close
@@ -86,13 +77,8 @@ import com.metrolist.shared.generated.resources.error_title
 import com.metrolist.shared.generated.resources.error_unknown
 import com.metrolist.shared.generated.resources.image_cache
 import com.metrolist.shared.generated.resources.library_offline_songs
-import com.metrolist.shared.generated.resources.max_animated_artwork_cache_size
 import com.metrolist.shared.generated.resources.max_image_cache_size
 import com.metrolist.shared.generated.resources.max_song_cache_size
-import com.metrolist.shared.generated.resources.music_video_quality
-import com.metrolist.shared.generated.resources.music_video_quality_auto
-import com.metrolist.shared.generated.resources.music_video_quality_desc
-import com.metrolist.shared.generated.resources.music_video_quality_resolution
 import com.metrolist.shared.generated.resources.ok
 import com.metrolist.shared.generated.resources.retry
 import com.metrolist.shared.generated.resources.select_download_directory
@@ -108,7 +94,6 @@ import com.metrolist.shared.generated.resources.song_cache_location_shared_media
 import com.metrolist.shared.generated.resources.song_cache_location_shared_media_desc
 import com.metrolist.shared.generated.resources.storage
 import com.metrolist.shared.generated.resources.unlimited
-import com.metrolist.shared.settings.MusicVideoQuality
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.storage.ResizableImageDiskCache
 import com.metrolist.shared.storage.SongCacheLimitsMb
@@ -152,18 +137,13 @@ fun StorageSettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val audioCacheManager: AudioCacheManager = koinInject()
     val songDownloadManager: SongDownloadManager = koinInject()
-    val musicVideoResolver: MusicVideoResolver = koinInject()
-    val animatedArtworkService: AnimatedArtworkService = koinInject()
 
     val songCacheTypeString = stringResource(Res.string.song_cache).lowercase()
     val imageCacheTypeString = stringResource(Res.string.image_cache).lowercase()
-    val animatedCoverCacheTypeString = stringResource(Res.string.animated_artwork_cache).lowercase()
 
     var clearSongCacheDialog by remember { mutableStateOf(false) }
     var clearImageCacheDialog by remember { mutableStateOf(false) }
     var clearDownloadsDialog by remember { mutableStateOf(false) }
-    var clearAnimatedCoverCacheDialog by remember { mutableStateOf(false) }
-    var clearMusicVideoCacheDialog by remember { mutableStateOf(false) }
     var showCacheWarningDialog by remember { mutableStateOf(false) }
     var cacheWarningType by remember { mutableStateOf("") }
     var cacheWarningUsage by remember { mutableLongStateOf(0L) }
@@ -191,18 +171,14 @@ fun StorageSettingsScreen(
     val imageDiskCache = context.imageLoader.diskCache
     var audioCacheLocation by remember { mutableStateOf(Settings.shared.audioCacheLocation) }
     var downloadLocation by remember { mutableStateOf(Settings.shared.downloadLocation) }
-    var musicVideoQuality by remember { mutableStateOf(Settings.shared.musicVideoQuality) }
 
     var deviceCapacity by remember { mutableLongStateOf(0L) }
     var songCacheSize by remember { mutableLongStateOf(0L) }
     var imageCacheSize by remember { mutableLongStateOf(0L) }
     var isCalculatingSizes by remember { mutableStateOf(true) }
     var downloadSize by remember { mutableLongStateOf(0L) }
-    var animatedCoverCacheSize by remember { mutableLongStateOf(0L) }
-    var musicVideoCacheEntries by remember { mutableIntStateOf(0) }
     var maxSongCacheSize by remember { mutableIntStateOf(Settings.shared.maxSongCacheSize) }
     var maxImageCacheSize by remember { mutableIntStateOf(Settings.shared.maxImageCacheSize) }
-    var maxAnimatedCoverCacheSize by remember { mutableIntStateOf(Settings.shared.animatedArtworkCacheSize) }
     var cacheLimitRequestId by remember { mutableIntStateOf(0) }
 
     val selectDownloadLocation: (String) -> Unit = { location ->
@@ -287,34 +263,10 @@ fun StorageSettingsScreen(
         label = "imageCacheProgress",
     )
 
-    val animatedCoverCacheSizeText =
-        if (isCalculatingSizes) {
-            stringResource(Res.string.calculating)
-        } else {
-            formatFileSize(animatedCoverCacheSize)
-        }
-
-    val animatedCoverProgress by animateFloatAsState(
-        targetValue =
-            if (maxAnimatedCoverCacheSize > 0 && animatedCoverCacheSize > 0) {
-                (animatedCoverCacheSize.toFloat() / (maxAnimatedCoverCacheSize * 1024 * 1024L)).coerceIn(0f, 1f)
-            } else {
-                0f
-            },
-        label = "animatedCoverProgress",
-    )
-
-    suspend fun readSongCacheSize(): Long =
-        withContext(Dispatchers.IO) {
-            audioCacheManager.getCacheSizeBytes()
-        }
-
     suspend fun readImageCacheSize(): Long =
         withContext(Dispatchers.IO) {
             imageDiskCache?.size ?: coilDir.calculateDirectorySize()
         }
-
-    suspend fun readAnimatedCoverCacheSize(): Long = withContext(Dispatchers.IO) { CanvasCache.get(context).sizeBytes() }
 
     val refreshStorageSizes: suspend () -> Unit = {
         isCalculatingSizes = true
@@ -332,8 +284,6 @@ fun StorageSettingsScreen(
             songCacheSize = readSongCacheSize()
             downloadSize = withContext(Dispatchers.IO) { audioCacheManager.getDownloadSizeBytes() }
             imageCacheSize = readImageCacheSize()
-            animatedCoverCacheSize = readAnimatedCoverCacheSize()
-            musicVideoCacheEntries = withContext(Dispatchers.IO) { musicVideoResolver.getCacheEntryCount() }
         } finally {
             isCalculatingSizes = false
         }
@@ -389,7 +339,6 @@ fun StorageSettingsScreen(
                 if (event == Lifecycle.Event.ON_RESUME) {
                     maxSongCacheSize = Settings.shared.maxSongCacheSize
                     maxImageCacheSize = Settings.shared.maxImageCacheSize
-                    maxAnimatedCoverCacheSize = Settings.shared.animatedArtworkCacheSize
                     coroutineScope.launch { refreshStorageSizes() }
                 }
             }
@@ -446,64 +395,6 @@ fun StorageSettingsScreen(
                     refreshStorageSizes()
                 }
             },
-        )
-    }
-
-    PopupVisibility(visible = clearAnimatedCoverCacheDialog) {
-        StorageConfirmationDialog(
-            title = stringResource(Res.string.clear_animated_artwork_cache),
-            message = stringResource(Res.string.clear_animated_artwork_cache_dialog),
-            onDismiss = { clearAnimatedCoverCacheDialog = false },
-            onConfirm = {
-                clearAnimatedCoverCacheDialog = false
-                launchStorageOperation {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            CanvasCache.get(context).clear()
-                            animatedArtworkService.clearCache()
-                        }
-                        refreshStorageSizes()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Timber.w(e, "Failed to clear animated artwork cache")
-                        storageOperationFailed = true
-                    }
-                }
-            },
-        )
-    }
-
-    PopupVisibility(visible = clearMusicVideoCacheDialog) {
-        AlertDialog(
-            onDismissRequest = { clearMusicVideoCacheDialog = false },
-            title = { Text(stringResource(Res.string.clear_music_video_cache)) },
-            text = { Text(stringResource(Res.string.clear_music_video_cache_dialog)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        launchStorageOperation {
-                            withContext(Dispatchers.IO) {
-                                musicVideoResolver.clearCache()
-                            }
-                            refreshStorageSizes()
-                        }
-                        clearMusicVideoCacheDialog = false
-                    },
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(
-                        stringResource(Res.string.clear_music_video_cache),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { clearMusicVideoCacheDialog = false }, shapes = ButtonDefaults.shapes()) {
-                    Text(androidStringResource(android.R.string.cancel))
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     }
 
@@ -625,8 +516,8 @@ fun StorageSettingsScreen(
         ) {
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 StorageSummary(
-                    usedBytes = songCacheSize + imageCacheSize + animatedCoverCacheSize,
-                    totalBytes = cacheAllocationBytes(maxSongCacheSize, maxImageCacheSize, maxAnimatedCoverCacheSize),
+                    usedBytes = songCacheSize + imageCacheSize,
+                    totalBytes = cacheAllocationBytes(maxSongCacheSize, maxImageCacheSize, 0),
                     loading = isCalculatingSizes,
                 )
             }
@@ -660,17 +551,9 @@ fun StorageSettingsScreen(
                     label = stringResource(Res.string.image_cache),
                     sizeText = imageCacheSizeText,
                     progress = imageCacheProgress,
+                    isLast = true,
                     onClick = { clearImageCacheDialog = true },
                     onClickLabel = stringResource(Res.string.clear_image_cache),
-                )
-                CacheInfoCard(
-                    icon = MetrolistIcons.Outlined.Equalizer,
-                    label = stringResource(Res.string.animated_artwork_cache),
-                    sizeText = animatedCoverCacheSizeText,
-                    progress = animatedCoverProgress,
-                    isLast = true,
-                    onClick = { clearAnimatedCoverCacheDialog = true },
-                    onClickLabel = stringResource(Res.string.clear_animated_artwork_cache),
                 )
             }
 
@@ -785,46 +668,6 @@ fun StorageSettingsScreen(
                             isLast = true,
                         )
                     }
-                }
-            }
-
-            SettingsSubScreenGroup(
-                title = stringResource(Res.string.music_video_quality),
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    SettingsSubScreenItemRow(
-                        item =
-                            listChooserSettingsItem(
-                                title = stringResource(Res.string.music_video_quality),
-                                description = stringResource(Res.string.music_video_quality_desc),
-                                options = MusicVideoQuality.entries,
-                                selectedOption = musicVideoQuality,
-                                optionToString = {
-                                    when (it) {
-                                        MusicVideoQuality.AUTO -> stringResource(Res.string.music_video_quality_auto)
-                                        else -> stringResource(Res.string.music_video_quality_resolution, it.name.drop(1))
-                                    }
-                                },
-                                onOptionSelected = { option ->
-                                    Settings.shared.musicVideoQuality = option
-                                    musicVideoQuality = option
-                                },
-                            ),
-                        isFirst = true,
-                        isLast = false,
-                    )
-                    SettingsSubScreenItemRow(
-                        item =
-                            SettingsSubScreenItem(
-                                title = stringResource(Res.string.clear_music_video_cache),
-                                description = stringResource(Res.string.clear_music_video_cache_desc),
-                                onClick = { clearMusicVideoCacheDialog = true },
-                            ),
-                        isFirst = false,
-                        isLast = true,
-                    )
                 }
             }
 
@@ -963,58 +806,6 @@ fun StorageSettingsScreen(
                             isLast = true,
                         )
                     }
-                }
-            }
-
-            SettingsSubScreenGroup(
-                title = stringResource(Res.string.animated_artwork_cache),
-            ) {
-                val animatedCoverCacheValues =
-                    remember(maxAnimatedCoverCacheSize) {
-                        (listOf(0, 128, 256, 512, 1024, 2048, 4096, 8192, 16384) + maxAnimatedCoverCacheSize).distinct().sorted()
-                    }
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    CacheSliderCard(
-                        revision = cacheSliderRevision,
-                        title = stringResource(Res.string.max_animated_artwork_cache_size),
-                        subtitle =
-                            when (maxAnimatedCoverCacheSize) {
-                                0 -> "$animatedCoverCacheSizeText/${stringResource(Res.string.disable)}"
-
-                                else -> "$animatedCoverCacheSizeText/${formatFileSize(
-                                    maxAnimatedCoverCacheSize * 1024 * 1024L,
-                                )}"
-                            },
-                        value =
-                            animatedCoverCacheValues
-                                .indexOf(maxAnimatedCoverCacheSize)
-                                .toFloat()
-                                .coerceIn(0f, (animatedCoverCacheValues.size - 1).toFloat()),
-                        onValueChangeFinished = {
-                            val newValue = animatedCoverCacheValues[it.roundToInt()]
-                            requestCacheLimit(
-                                newValue = newValue,
-                                cacheType = animatedCoverCacheTypeString,
-                                readSize = ::readAnimatedCoverCacheSize,
-                                updateSize = { it -> animatedCoverCacheSize = it },
-                                applyLimit = {
-                                    withContext(Dispatchers.IO) {
-                                        CanvasCache.get(context).setLimit(newValue)
-                                        Settings.shared.animatedArtworkCacheSize = newValue
-                                    }
-                                    maxAnimatedCoverCacheSize = newValue
-                                    animatedCoverCacheSize = readAnimatedCoverCacheSize()
-                                },
-                            )
-                        },
-                        steps = animatedCoverCacheValues.size - 1,
-                        enabled = !isCalculatingSizes,
-                        isFirst = true,
-                        isLast = true,
-                    )
                 }
             }
         }

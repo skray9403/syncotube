@@ -4,12 +4,9 @@ import android.os.SystemClock
 import androidx.compose.runtime.snapshotFlow
 import androidx.media3.common.Player
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
-import com.metrolist.shared.api.musicvideo.MusicVideoResolver
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.canSwitchToAudioTrack
 import com.metrolist.shared.model.isPodcast
-import com.metrolist.shared.model.isVideoSong
 import com.metrolist.shared.playback.PlaybackCrossfadeController
 import com.metrolist.shared.playback.SleepTimerController
 import com.metrolist.shared.playback.ffmpeg.DirectPlaybackCache
@@ -43,7 +40,6 @@ internal class AndroidQueueTransitions(
     private val player: AndroidPlaybackPlayer,
     private val scope: CoroutineScope,
     private val audioCacheManager: AudioCacheManager,
-    private val musicVideoResolver: MusicVideoResolver,
     private val queue: AndroidQueueCoordinator,
     private val fetchPlaybackResource: suspend (SongItem, Boolean) -> PlaybackResource?,
     private val onPreloadFailure: suspend (PlaybackResource, SongItem, Boolean, Throwable) -> Unit,
@@ -216,7 +212,7 @@ internal class AndroidQueueTransitions(
 
     fun scheduleNextTrackPreload(trigger: NextTrackPreloadTrigger) {
         if (trigger.invalidationGeneration != nextTrackPreloadInvalidation.value) return
-        if (AndroidDeviceConnect.manager.remote.isActive || AndroidListenTogetherManager.isGuestPlaybackLocked) return
+        if (AndroidDeviceConnect.manager.remote.isActive) return
         val nextVideoId = trigger.nextVideoId ?: return
         val preloadToken = nextTrackPreloadToken
         if (
@@ -233,14 +229,7 @@ internal class AndroidQueueTransitions(
                 .getOrNull(player.currentMediaItemIndex.value + 1)
                 ?.takeIf { it.id == trigger.nextVideoId } ?: return
         val sourceSong = SongMetadataState.apply(nextSong)
-        val wantNextVideo =
-            shouldRequestQueueVideo(
-                isVideoSong = nextSong.isVideoSong,
-                isVideoModeActive = Settings.shared.videoViewerVisible,
-                isLocal = nextSong.isLocal || nextSong.id.startsWith("local_"),
-                isPodcast = nextSong.isPodcast,
-                videoPlaybackEnabled = Settings.shared.musicVideoPlaybackEnabled,
-            )
+        val wantNextVideo = false
         val attempt = NextTrackPreloadAttempt(trigger.currentPlaybackInstanceId, nextSong.id, wantNextVideo)
         if (nextTrackPreloadAttempt == attempt) return
         cancelNextTrackPreload(resetAttempt = false)
@@ -248,37 +237,10 @@ internal class AndroidQueueTransitions(
         nextTrackPreloadJob =
             scope.launch {
                 if (!isCurrentPreloadTarget(sessionId, trigger, currentVideoId, nextSong, wantNextVideo)) return@launch
-                val cachedAudio =
-                    if (!wantNextVideo && nextSong.canSwitchToAudioTrack) {
-                        audioCacheManager.getCachedPlaybackResource(sourceSong)
-                    } else {
-                        null
-                    }
-                val selection =
-                    resolveAndroidAudioTrackSelection(
-                        sourceSong = sourceSong,
-                        positionMs = 0L,
-                        wantVideo = wantNextVideo,
-                        cachedAudio = cachedAudio,
-                        sourceIsDownloaded = cachedAudio != null && audioCacheManager.isDownloaded(sourceSong.id),
-                        allowCounterpartLookup =
-                            canSwapToAudioCounterpart(
-                                videoPlaybackEnabled = Settings.shared.musicVideoPlaybackEnabled,
-                                networkConnected = PlaybackNetworkStateStore.current.connected,
-                                remotePlaybackActive = AndroidDeviceConnect.manager.remote.isActive,
-                                guestPlaybackLocked = AndroidListenTogetherManager.isGuestPlaybackLocked,
-                            ),
-                        isCounterpartAllowed = { !BlockedContent.isBlocked(it) },
-                        resolveMusicTrack = musicVideoResolver::resolveMusicTrack,
-                    )
-                var playbackSong = selection.song
-                var playbackPositionMs = selection.positionMs
-                var resource = selection.cachedAudio ?: fetchPlaybackResource(playbackSong, wantNextVideo)
-                if (resource == null && playbackSong.id != nextSong.id) {
-                    playbackSong = sourceSong
-                    playbackPositionMs = 0L
-                    resource = cachedAudio ?: fetchPlaybackResource(playbackSong, wantNextVideo)
-                }
+                val cachedAudio = audioCacheManager.getCachedPlaybackResource(sourceSong)
+                var playbackSong = sourceSong
+                var playbackPositionMs = 0L
+                var resource = cachedAudio ?: fetchPlaybackResource(playbackSong, false)
                 if (resource == null || !isCurrentPreloadTarget(sessionId, trigger, currentVideoId, nextSong, wantNextVideo)) {
                     return@launch
                 }
@@ -363,7 +325,7 @@ internal class AndroidQueueTransitions(
     }
 
     fun startAndroidCrossfade() {
-        if (AndroidDeviceConnect.manager.remote.isActive || AndroidListenTogetherManager.isGuestPlaybackLocked) return
+        if (AndroidDeviceConnect.manager.remote.isActive) return
         val token = nextTrackPreloadToken ?: return
         val resource = nextTrackPreloadResource ?: return
         val expectedInstanceId = nextTrackPreloadExpectedInstanceId
@@ -418,7 +380,7 @@ internal class AndroidQueueTransitions(
                         requested && (playing || state == Player.STATE_ENDED)
                     }
                 runCrossfadeFrames(playbackActive) {
-                    if (AndroidDeviceConnect.manager.remote.isActive || AndroidListenTogetherManager.isGuestPlaybackLocked) {
+                    if (AndroidDeviceConnect.manager.remote.isActive) {
                         cancelAndroidCrossfade()
                         cancelNextTrackPreload()
                         return@launch
@@ -613,7 +575,7 @@ internal class AndroidQueueTransitions(
         val token = nextTrackPreloadToken ?: return false
         val resource = nextTrackPreloadResource ?: return false
         if (!isPreloadedPlaybackModeCurrent() || nextTrackPreloadExpectedInstanceId != completedPlaybackInstanceId ||
-            AndroidDeviceConnect.manager.remote.isActive || AndroidListenTogetherManager.isGuestPlaybackLocked
+            AndroidDeviceConnect.manager.remote.isActive
         ) {
             cancelNextTrackPreload()
             return false
@@ -631,14 +593,9 @@ internal class AndroidQueueTransitions(
     }
 
     private fun isPreloadedPlaybackModeCurrent(): Boolean {
-        val sourceSong = nextTrackPreloadSourceSong ?: return false
+        nextTrackPreloadSourceSong ?: return false
         val attempt = nextTrackPreloadAttempt ?: return false
-        return isQueuePlaybackModeCurrent(
-            song = sourceSong,
-            requestedWantVideo = attempt.wantVideo,
-            currentVideoViewerVisible = Settings.shared.videoViewerVisible,
-            videoPlaybackEnabled = Settings.shared.musicVideoPlaybackEnabled,
-        )
+        return !attempt.wantVideo
     }
 
     private fun preloadedQueueSongForPromotion(): SongItem? {
@@ -660,7 +617,6 @@ internal class AndroidQueueTransitions(
         wantVideo: Boolean,
     ): Boolean =
         !AndroidDeviceConnect.manager.remote.isActive &&
-            !AndroidListenTogetherManager.isGuestPlaybackLocked &&
             sessionId == queue.queueSessionId &&
             trigger.invalidationGeneration == nextTrackPreloadInvalidation.value &&
             player.currentPlaybackInstanceId == trigger.currentPlaybackInstanceId &&
@@ -668,13 +624,7 @@ internal class AndroidQueueTransitions(
             player.songQueue.value
                 .getOrNull(player.currentMediaItemIndex.value + 1)
                 ?.id == nextSong.id &&
-            shouldRequestQueueVideo(
-                isVideoSong = nextSong.isVideoSong,
-                isVideoModeActive = Settings.shared.videoViewerVisible,
-                isLocal = nextSong.isLocal || nextSong.id.startsWith("local_"),
-                isPodcast = nextSong.isPodcast,
-                videoPlaybackEnabled = Settings.shared.musicVideoPlaybackEnabled,
-            ) == wantVideo
+            !wantVideo
 
     internal data class NextTrackPreloadAttempt(
         val currentPlaybackInstanceId: Long,

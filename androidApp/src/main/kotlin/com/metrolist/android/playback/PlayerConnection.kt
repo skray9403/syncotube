@@ -12,7 +12,6 @@ import androidx.media3.common.Player
 import com.metrolist.android.R
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
 import com.metrolist.android.deviceconnect.toDeviceConnectRepeatMode
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.models.decodePersistPlayerState
 import com.metrolist.shared.api.PlaylistPage
 import com.metrolist.shared.cast.CastDevice
@@ -51,9 +50,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,14 +69,6 @@ import org.jetbrains.compose.resources.getString
 import timber.log.Timber
 
 val LocalPlayerConnection = staticCompositionLocalOf<PlayerConnection?> { null }
-
-data class ListenTogetherPlaybackRequest(
-    val song: SongItem,
-    val queue: List<SongItem> = emptyList(),
-    val startIndex: Int = 0,
-    val queueTitle: String? = null,
-    val shuffleModeEnabled: Boolean? = null,
-)
 
 internal fun canSkipToNext(
     isServiceConnected: Boolean,
@@ -186,12 +175,6 @@ class PlayerConnection(
     private val context: Context,
     private val scope: CoroutineScope,
 ) : PlayerSession {
-    internal fun playFromSearch(request: VoiceSearchRequest) {
-        if (deferUntilConnected { playFromSearch(request) }) return
-        cancelPlaylistRequest()
-        musicService?.playFromSearch(request)
-    }
-
     private var musicService: MusicService? = null
     val playbackCommandGeneration: Long get() = musicService?.playbackCommandGeneration ?: 0L
 
@@ -237,9 +220,6 @@ class PlayerConnection(
 
     private val _currentSong = MutableStateFlow<SongItem?>(null)
     override val currentSong: StateFlow<SongItem?> = _currentSong.asStateFlow()
-    private val listenTogetherPlaybackRequestsState =
-        MutableSharedFlow<ListenTogetherPlaybackRequest>(extraBufferCapacity = 1)
-    val listenTogetherPlaybackRequests: SharedFlow<ListenTogetherPlaybackRequest> = listenTogetherPlaybackRequestsState
 
     private val _isPlaying = MutableStateFlow(false)
     override val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -315,7 +295,7 @@ class PlayerConnection(
     private val crossfadeStateValue = MutableStateFlow<AndroidCrossfadeState?>(null)
     internal val crossfadeState: StateFlow<AndroidCrossfadeState?> = crossfadeStateValue.asStateFlow()
 
-    private val _isVideoViewerVisible = MutableStateFlow(Settings.shared.videoViewerVisible)
+    private val _isVideoViewerVisible = MutableStateFlow(false)
     override val isVideoViewerVisible: StateFlow<Boolean> = _isVideoViewerVisible.asStateFlow()
 
     private val _sleepTimerState = MutableStateFlow(SleepTimerState())
@@ -327,31 +307,23 @@ class PlayerConnection(
     private val _castState = MutableStateFlow(CastState())
     override val castState: StateFlow<CastState> = _castState.asStateFlow()
 
-    val videoPlayer: Player?
-        get() = musicService?.media3Player
-
     val audioSessionId: Int
         get() = musicService?.player?.getAudioSessionId() ?: 0
 
     val canSkipPrevious: StateFlow<Boolean> =
         combine(
-            combine(
-                _isConnected,
-                AndroidDeviceConnect.manager.remote.state,
-                _queueSnapshot,
-            ) { isConnected, deviceConnectState, queue ->
-                Triple(isConnected, deviceConnectState, queue)
-            },
+            _isConnected,
+            AndroidDeviceConnect.manager.remote.state,
+            _queueSnapshot,
             _repeatMode,
-            AndroidListenTogetherManager.isGuestPlaybackLockedFlow,
             _currentSong,
-        ) { (isConnected, deviceConnectState, queue), repeatMode, isPlaybackLocked, song ->
+        ) { isConnected, deviceConnectState, queue, repeatMode, song ->
             canSkipToPrevious(
                 isConnected || queue.displayedItems.isNotEmpty(),
                 deviceConnectState.sessionId != null,
                 queue,
                 repeatMode,
-                isPlaybackLocked,
+                isPlaybackLocked = false,
                 song?.isLive == true || _currentPlaybackResource.value?.isLive == true,
             )
         }.stateIn(scope, SharingStarted.Eagerly, true)
@@ -361,14 +333,13 @@ class PlayerConnection(
             AndroidDeviceConnect.manager.remote.state,
             _queueSnapshot,
             _repeatMode,
-            AndroidListenTogetherManager.isGuestPlaybackLockedFlow,
-        ) { isConnected, deviceConnectState, queue, repeatMode, isPlaybackLocked ->
+        ) { isConnected, deviceConnectState, queue, repeatMode ->
             canSkipToNext(
                 isConnected || queue.displayedItems.isNotEmpty(),
                 deviceConnectState.sessionId != null,
                 queue,
                 repeatMode,
-                isPlaybackLocked,
+                isPlaybackLocked = false,
             )
         }.stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -631,21 +602,6 @@ class PlayerConnection(
             }
         }
         scope.launch {
-            service.isVideoModeActive.collect {
-                _isVideoModeActive.value = it
-                updateProgress()
-            }
-        }
-        scope.launch {
-            service.isVideoModeResolving.collect { _isVideoModeResolving.value = it }
-        }
-        scope.launch {
-            service.isVideoViewerVisible.collect {
-                _isVideoViewerVisible.value = it
-                updateProgress()
-            }
-        }
-        scope.launch {
             service.sleepTimerController.state.collect { _sleepTimerState.value = it }
         }
     }
@@ -660,13 +616,7 @@ class PlayerConnection(
         val dur = _duration.value
         if (dur > 0) {
             _progress.value = (_currentPosition.value.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
-            val inVideoMode = _isVideoModeActive.value || _isVideoViewerVisible.value
-            _bufferedProgress.value =
-                if (inVideoMode) {
-                    (_bufferedPosition.value.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
+            _bufferedProgress.value = 0f
         } else {
             _progress.value = 0f
             _bufferedProgress.value = 0f
@@ -677,14 +627,10 @@ class PlayerConnection(
         song: SongItem,
         url: String,
         startPositionMs: Long = 0L,
-        startVideo: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") startVideo: Boolean = false,
     ) {
         if (song.isUnavailable) return
         cancelPlaylistRequest()
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) {
-            listenTogetherPlaybackRequestsState.tryEmit(ListenTogetherPlaybackRequest(song = song))
-            return
-        }
         if (AndroidDeviceConnect.intercept(
                 DcPlaybackCommand(
                     DcPlaybackAction.REPLACE_QUEUE,
@@ -697,7 +643,7 @@ class PlayerConnection(
         ) {
             return
         }
-        playSongInternal(song, url, startPositionMs, startVideo)
+        playSongInternal(song, url, startPositionMs)
     }
 
     private fun localSongChangeStartsPlayback(): Boolean =
@@ -712,16 +658,14 @@ class PlayerConnection(
         song: SongItem,
         url: String,
         startPositionMs: Long = 0L,
-        startVideo: Boolean = false,
     ) {
-        if (deferUntilConnected { playSongInternal(song, url, startPositionMs, startVideo) }) return
+        if (deferUntilConnected { playSongInternal(song, url, startPositionMs) }) return
         if (url.isBlank()) {
             musicService?.playQueue(
                 listOf(song),
                 finite = true,
                 startPositionMs = startPositionMs,
                 startPlaying = localSongChangeStartsPlayback(),
-                startVideo = startVideo,
             )
         } else {
             musicService?.player?.play(song, url, startPlaying = localSongChangeStartsPlayback())
@@ -844,7 +788,7 @@ class PlayerConnection(
                     } else if (shuffle) {
                         shuffleQueue(songs, title, finite = true, playlistPage = page)
                     } else {
-                        playQueue(songs, queueTitle = title, finite = true, playlistPage = page, startVideo = false)
+                        playQueue(songs, queueTitle = title, finite = true, playlistPage = page)
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -875,7 +819,6 @@ class PlayerConnection(
             shuffleModeEnabled = true,
             playlistPage = playlistPage,
             songsOnly = songsOnly,
-            startVideo = false,
         )
     }
 
@@ -887,7 +830,7 @@ class PlayerConnection(
         shuffleModeEnabled: Boolean? = null,
         playlistPage: PlaylistPage? = null,
         songsOnly: Boolean = false,
-        startVideo: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") startVideo: Boolean = false,
     ) {
         if (songs.any { it.isUnavailable }) {
             val queue = MusicQueue().apply { setQueue(songs, startIndex) }
@@ -900,13 +843,12 @@ class PlayerConnection(
                     shuffleModeEnabled,
                     playlistPage,
                     songsOnly,
-                    startVideo,
                 )
             }
             return
         }
         if (deferUntilConnected {
-                playQueue(songs, startIndex, queueTitle, finite, shuffleModeEnabled, playlistPage, songsOnly, startVideo)
+                playQueue(songs, startIndex, queueTitle, finite, shuffleModeEnabled, playlistPage, songsOnly)
             }
         ) {
             return
@@ -914,9 +856,7 @@ class PlayerConnection(
         cancelPlaylistRequest()
         val generation = playlistRequestGeneration
         // Synced queue snapshots have no continuation cursor in the wire protocol.
-        if (playlistPage?.hasMore == true &&
-            (AndroidListenTogetherManager.isGuestPlaybackLocked || AndroidDeviceConnect.manager.remote.willStartRemotePlayback)
-        ) {
+        if (playlistPage?.hasMore == true && AndroidDeviceConnect.manager.remote.willStartRemotePlayback) {
             playlistRequestJob =
                 scope.launch {
                     try {
@@ -937,7 +877,6 @@ class PlayerConnection(
                                 finite,
                                 shuffleModeEnabled,
                                 songsOnly = songsOnly,
-                                startVideo = startVideo,
                             )
                         }
                     } catch (e: CancellationException) {
@@ -952,19 +891,6 @@ class PlayerConnection(
                 }
             return
         }
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) {
-            val selectedSong = songs.getOrElse(startIndex) { songs.firstOrNull() } ?: return
-            listenTogetherPlaybackRequestsState.tryEmit(
-                ListenTogetherPlaybackRequest(
-                    song = selectedSong,
-                    queue = songs,
-                    startIndex = startIndex,
-                    queueTitle = queueTitle,
-                    shuffleModeEnabled = shuffleModeEnabled,
-                ),
-            )
-            return
-        }
         musicService?.playQueue(
             songs,
             startIndex,
@@ -974,7 +900,6 @@ class PlayerConnection(
             playlistPage = playlistPage,
             songsOnly = songsOnly,
             startPlaying = localSongChangeStartsPlayback(),
-            startVideo = startVideo,
         )
     }
 
@@ -991,7 +916,6 @@ class PlayerConnection(
             val commandGeneration = service.playbackCommandGeneration
             val needsPromotion =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM &&
-                    !AndroidListenTogetherManager.isGuestPlaybackLocked &&
                     !_castState.value.isConnected &&
                     !AndroidDeviceConnect.manager.remote.willStartRemotePlayback &&
                     !service.player.wantsPlayback &&
@@ -1017,7 +941,6 @@ class PlayerConnection(
 
     override fun togglePlayPause() {
         if (deferUntilConnected { togglePlayPause() }) return
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         val action =
             if (_castState.value.takeIf { it.isConnected }?.isPlaying
                 ?: (musicService?.player?.wantsPlayback == true)
@@ -1046,17 +969,15 @@ class PlayerConnection(
         source: PlaybackSeekSource,
     ) {
         if (_currentSong.value?.isLive == true || _currentPlaybackResource.value?.isLive == true) return
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         if (AndroidDeviceConnect.intercept(DcPlaybackCommand(DcPlaybackAction.SEEK, positionMs = position))) return
-        seekToInternal(position, publishToRoom = true, source = source)
+        seekToInternal(position, source = source)
     }
 
     private fun seekToInternal(
         position: Long,
-        publishToRoom: Boolean = false,
         source: PlaybackSeekSource = PlaybackSeekSource.Other,
     ) {
-        if (deferUntilConnected { seekToInternal(position, publishToRoom, source) }) return
+        if (deferUntilConnected { seekToInternal(position, source) }) return
         val service = musicService ?: return
         if (_castState.value.isConnected) {
             service.seekCastTo(position)
@@ -1064,7 +985,6 @@ class PlayerConnection(
             service.updatePendingRestorePosition(position)
             service.seekTo(position, source)
         }
-        if (publishToRoom) AndroidListenTogetherManager.currentManager?.sendSeek(position)
     }
 
     override fun setVolume(volume: Float) {
@@ -1102,7 +1022,6 @@ class PlayerConnection(
     override fun skipToNext() = skipToNext(expectedSongId = null)
 
     private fun skipToNext(expectedSongId: String?) {
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         if (AndroidDeviceConnect.intercept(DcPlaybackCommand(DcPlaybackAction.NEXT))) return
         skipToNextInternal(local = true, expectedSongId = expectedSongId)
     }
@@ -1127,7 +1046,6 @@ class PlayerConnection(
     }
 
     override fun skipToPrevious() {
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         if (AndroidDeviceConnect.intercept(DcPlaybackCommand(DcPlaybackAction.PREVIOUS))) return
         skipToPreviousInternal(local = true)
     }
@@ -1151,7 +1069,6 @@ class PlayerConnection(
         toIndex: Int = -1,
     ) {
         if (deferUntilConnected { skipToQueueItem(index, expectedQueue, toIndex) }) return
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         val player = musicService?.player ?: return
         if (player.queueSnapshot() != expectedQueue) return
         if (AndroidDeviceConnect.intercept(
@@ -1167,7 +1084,6 @@ class PlayerConnection(
 
     override fun skipToQueueEntry(entryKey: Long) {
         if (deferUntilConnected { skipToQueueEntry(entryKey) }) return
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         val player = musicService?.player ?: return
         val state = player.queueState.value
         val index = queueEntryIndex(state, entryKey) ?: return
@@ -1268,10 +1184,6 @@ class PlayerConnection(
         if (deferUntilConnected { startRadio(song) }) return
         if (song.isUnavailable) return
         cancelPlaylistRequest()
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) {
-            listenTogetherPlaybackRequestsState.tryEmit(ListenTogetherPlaybackRequest(song = song))
-            return
-        }
         musicService?.playMix(song, startPlaying = localSongChangeStartsPlayback())
     }
 
@@ -1290,7 +1202,6 @@ class PlayerConnection(
 
     override fun addQueueEntry(entryKey: Long) {
         if (deferUntilConnected { addQueueEntry(entryKey) }) return
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         val player = musicService?.player ?: return
         val state = player.queueState.value
         val index = queueEntryIndex(state, entryKey) ?: return
@@ -1326,9 +1237,7 @@ class PlayerConnection(
         playNext: Boolean = false,
     ) {
         if (deferUntilConnected { addDownloadedAlbumToQueue(songs, downloadedSongIds, playNext) }) return
-        val remotePlayback =
-            _castState.value.isConnected || AndroidListenTogetherManager.currentManager?.hasActiveOrPendingRoom == true ||
-                AndroidDeviceConnect.manager.remote.willStartRemotePlayback
+        val remotePlayback = _castState.value.isConnected || AndroidDeviceConnect.manager.remote.willStartRemotePlayback
         addToQueue(downloadedAlbumQueueSongs(songs, downloadedSongIds, remotePlayback), playNext)
     }
 
@@ -1336,7 +1245,7 @@ class PlayerConnection(
         songs: List<SongItem>,
         playNext: Boolean = false,
     ) {
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked || songs.isEmpty()) return
+        if (songs.isEmpty()) return
         if (deferUntilConnected { addToQueue(songs, playNext) }) return
         val preparedSongs =
             BlockedContent.filterPlayableSongs(songs).map { song ->
@@ -1406,7 +1315,7 @@ class PlayerConnection(
     ): QueueRemoval? {
         val player = musicService?.player ?: return null
         val sync = AndroidDeviceConnect.manager.remote
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked || player.queueSnapshot() != expectedQueue) return null
+        if (player.queueSnapshot() != expectedQueue) return null
         val previewQueue = MusicQueue().apply { restore(expectedQueue) }
         val removal = previewQueue.removeAt(indices) ?: return null
         val validIndices = removal.items.mapTo(mutableSetOf()) { it.index }
@@ -1471,7 +1380,6 @@ class PlayerConnection(
         ) {
             return
         }
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         removals.asReversed().forEach(player::restoreQueueItems)
     }
 
@@ -1481,7 +1389,6 @@ class PlayerConnection(
         expectedQueue: MusicQueueSnapshot = _queueSnapshot.value,
         updatedItem: SongItem? = null,
     ) {
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         val player = musicService?.player ?: return
         if (player.queueSnapshot() != expectedQueue) return
         if (AndroidDeviceConnect.intercept(
@@ -1504,7 +1411,6 @@ class PlayerConnection(
         toEntryKey: Long,
         updatedItem: SongItem?,
     ): Boolean {
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return false
         val player = musicService?.player ?: return false
         val state = player.queueState.value
         val from = queueEntryIndex(state, fromEntryKey) ?: return false
@@ -1527,7 +1433,6 @@ class PlayerConnection(
     }
 
     override fun reorderQueueEntries(entryKeys: List<Long>): Boolean {
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return false
         val player = musicService?.player ?: return false
         val entries = player.queueState.value.entries
         if (entryKeys.size != entries.size || entryKeys.toSet() != entries.map { it.key }.toSet()) return false
@@ -1553,20 +1458,11 @@ class PlayerConnection(
 
     fun getCurrentPlaybackResource(): PlaybackResource? = _currentPlaybackResource.value
 
-    override fun changeMusicVideoResolution(quality: MusicVideoQuality) {
-        if (deferUntilConnected { changeMusicVideoResolution(quality) }) return
-        musicService?.changeMusicVideoResolution(quality)
-    }
+    override fun changeMusicVideoResolution(quality: MusicVideoQuality) = Unit
 
-    override fun toggleVideoMode() {
-        if (deferUntilConnected { toggleVideoMode() }) return
-        musicService?.toggleVideoMode()
-    }
+    override fun toggleVideoMode() = Unit
 
-    override fun setVideoMode(wantVideo: Boolean) {
-        if (deferUntilConnected { setVideoMode(wantVideo) }) return
-        musicService?.setVideoMode(wantVideo)
-    }
+    override fun setVideoMode(wantVideo: Boolean) = Unit
 
     fun stop() {
         cancelPlaylistRequest()

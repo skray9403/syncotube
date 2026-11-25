@@ -47,7 +47,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.locale.AppLocale
 import com.metrolist.android.onboarding.OnboardingDestination
 import com.metrolist.android.onboarding.OnboardingScreen
@@ -58,11 +57,9 @@ import com.metrolist.android.playback.resolveIncomingPlaybackSong
 import com.metrolist.android.playback.toAndroidContentHints
 import com.metrolist.android.ui.IncomingDestination
 import com.metrolist.android.ui.MetrolistApp
-import com.metrolist.android.ui.screens.settings.DiscordLoginFlow
 import com.metrolist.android.ui.theme.MetrolistTheme
 import com.metrolist.android.ui.toIncomingDestination
 import com.metrolist.android.utils.CrashHandler
-import com.metrolist.android.utils.isAndroidTv
 import com.metrolist.innertubex.extraction.TokenProvider
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.settings.LibraryFilterType
@@ -103,19 +100,11 @@ internal class NavigationRestorationViewModel(
 class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_SEARCH = "com.metrolist.music.action.SEARCH"
-        const val ACTION_PLAYLIST_IMPORT = "com.metrolist.music.action.PLAYLIST_IMPORT"
-        const val EXTRA_IMPORT_RESULT_MESSAGE = "import_result_message"
         const val ACTION_DOWNLOADS = "com.metrolist.music.action.DOWNLOADS"
-        const val ACTION_LISTEN_TOGETHER = "com.metrolist.music.action.LISTEN_TOGETHER"
         const val ACTION_LIBRARY = "com.metrolist.music.action.LIBRARY"
         const val ACTION_UPDATES = "com.metrolist.music.action.UPDATES"
         const val ACTION_LOGIN = "com.metrolist.music.action.LOGIN"
         const val ACTION_BACKUP_RESTORE = "com.metrolist.music.action.BACKUP_RESTORE"
-        const val ACTION_RECOGNITION = "com.metrolist.music.action.RECOGNITION"
-        const val ACTION_LASTFM = "com.metrolist.music.action.LASTFM"
-        const val ACTION_OPEN_WIDGET_TARGET = "com.metrolist.music.action.OPEN_WIDGET_TARGET"
-        const val EXTRA_WIDGET_TARGET_TYPE = "widget_target_type"
-        const val EXTRA_WIDGET_TARGET_ID = "widget_target_id"
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -192,7 +181,6 @@ class MainActivity : ComponentActivity() {
             }
         incomingIntentState.value = pendingIntent
         setIntent(pendingIntent ?: Intent(this, MainActivity::class.java))
-        isInPipModeState.value = isInPictureInPictureMode
         WindowCompat.enableEdgeToEdge(window)
         val lightSystemBars = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK != Configuration.UI_MODE_NIGHT_YES
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -224,7 +212,6 @@ class MainActivity : ComponentActivity() {
                     recreate()
                     return@run
                 }
-                consumeDiscordCallback(intent)
                 app.restoreDeviceConnectIfEnabled()
                 prepareIncomingPlayback()
                 showContent()
@@ -255,10 +242,10 @@ class MainActivity : ComponentActivity() {
                     )
                 prefetchIncomingAudio(
                     song = song,
-                    wantVideo = Settings.shared.videoViewerVisible,
+                    wantVideo = false,
                     canPlayLocally =
                         PlaybackNetworkStateStore.current.connected &&
-                            !AndroidListenTogetherManager.isGuestPlaybackLocked && !AndroidDeviceConnect.manager.remote.isActive,
+                            !AndroidDeviceConnect.manager.remote.isActive,
                 ) { source ->
                     get<StreamResolver>().resolve(
                         source.id,
@@ -323,8 +310,7 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     } else {
-                        val tvDevice = remember { isAndroidTv() }
-                        CompositionLocalProvider(LocalIsTv provides tvDevice) {
+                        CompositionLocalProvider(LocalIsTv provides false) {
                             MetrolistTheme {
                                 OnboardingScreen(
                                     migration = app.legacyInstallMigration,
@@ -361,14 +347,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        isInPipModeState.value = isInPictureInPictureMode
-    }
-
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putParcelable("incomingIntent", incomingIntentState.value)
         super.onSaveInstanceState(outState)
@@ -380,10 +358,6 @@ class MainActivity : ComponentActivity() {
         incomingPlaybackSong = null
         setIntent(intent)
         incomingIntentState.value = intent
-        lifecycleScope.launch {
-            if (!awaitStartup()) return@launch
-            (application as App).recovery.run { consumeDiscordCallback(intent) }
-        }
     }
 
     private suspend fun awaitStartup(): Boolean {
@@ -395,13 +369,6 @@ class MainActivity : ComponentActivity() {
         } catch (error: Throwable) {
             if (error !is CancellationException) app.recovery.capture(error)
             false
-        }
-    }
-
-    private fun consumeDiscordCallback(callback: Intent) {
-        if (DiscordLoginFlow.handleCallback(callback) && intent === callback) {
-            incomingIntentState.value = null
-            setIntent(Intent(this, MainActivity::class.java))
         }
     }
 }

@@ -40,7 +40,6 @@ import coil3.compose.SubcomposeAsyncImage
 import com.metrolist.android.R
 import com.metrolist.android.ui.component.Material3SettingsGroup
 import com.metrolist.android.ui.component.Material3SettingsItem
-import com.metrolist.shared.api.lastfm.LastFM
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.action_login
 import com.metrolist.shared.generated.resources.migrated
@@ -52,13 +51,11 @@ import com.metrolist.shared.generated.resources.ready_to_migrate
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.state.GlobalYouTube
 import com.metrolist.shared.state.GlobalYouTubeRepository
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.ContainedLoadingIndicator
 import com.metrolist.shared.ui.icons.MetrolistIcons
 import com.metrolist.shared.ui.onboarding.OnboardingPage
 import com.metrolist.shared.ui.onboarding.OnboardingPageContent
 import org.jetbrains.compose.resources.stringResource
-import com.metrolist.shared.BuildConfig as SharedBuildConfig
 import com.metrolist.shared.ui.onboarding.OnboardingContent as SharedOnboardingContent
 
 @Composable
@@ -70,23 +67,10 @@ internal fun OnboardingContent(
     onRestore: () -> Unit,
     previousContent: OnboardingPageContent? = null,
 ) {
-    val isTv = LocalIsTv.current
-    val preferredActionFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(isTv, content.page, content.isWorking) {
-        if (isTv && !content.isWorking) {
-            withFrameNanos { }
-            preferredActionFocusRequester.requestFocus()
-        }
-    }
     SharedOnboardingContent(
         content = content,
         previousContent = previousContent,
-        preferredActionModifier =
-            if (isTv) {
-                Modifier.focusRequester(preferredActionFocusRequester)
-            } else {
-                Modifier
-            },
+        preferredActionModifier = Modifier,
         welcomeContent = { modifier ->
             val iconRes =
                 if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
@@ -211,15 +195,6 @@ private fun OnboardingAccountAvatar(
                 GlobalYouTube.updateCookie(Settings.shared.innerTubeCookie)
                 value = GlobalYouTubeRepository.instance.getAccountInfo()?.thumbnailUrl
                 if (!value.isNullOrBlank()) Settings.shared.accountThumbnail = value.orEmpty()
-            }
-            if (value.isNullOrBlank() && account.fetchLastFmImage && SharedBuildConfig.LASTFM_API_KEY.isNotBlank()) {
-                value =
-                    LastFM
-                        .getUserInfo(GlobalYouTube.client, account.displayName, SharedBuildConfig.LASTFM_API_KEY)
-                        .getOrNull()
-                        ?.image
-                        ?.lastOrNull { it.url.isNotBlank() }
-                        ?.url
             }
         }
     Box(Modifier.size(54.dp)) {

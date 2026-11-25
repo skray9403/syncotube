@@ -270,7 +270,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
-        buildConfigField("Long", "DISCORD_APP_ID", "1447278780795064401L")
         buildConfigField("Boolean", "UPDATER_ENABLED", "true")
         buildConfigField("String", "BUNDLED_LANGUAGE_TAGS", "\"${bundledLanguageTags.joinToString(",")}\"")
     }
@@ -461,11 +460,9 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(project(":opusDecoder"))
-    implementation(libs.media3.inspector)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.session)
     implementation(libs.media3.datasource)
-    implementation(libs.media3.ui)
 
     implementation(libs.coil)
     implementation(libs.coil.network.okhttp)

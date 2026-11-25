@@ -222,14 +222,6 @@ internal val musicWidgetProgressIds =
         stop = R.id.widget_progress_stop,
     )
 
-internal val playlistWidgetProgressIds =
-    WidgetProgressIds(
-        bar = R.id.widget_playlist_progress,
-        track = R.id.widget_playlist_progress_track,
-        fill = R.id.widget_playlist_progress_fill,
-        stop = R.id.widget_playlist_progress_stop,
-    )
-
 internal fun RemoteViews.setWidgetProgress(
     ids: WidgetProgressIds,
     duration: Long,

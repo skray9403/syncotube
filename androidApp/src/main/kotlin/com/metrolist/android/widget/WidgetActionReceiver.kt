@@ -9,15 +9,8 @@ import com.metrolist.android.App
 import com.metrolist.android.playback.MusicService
 import com.metrolist.android.playback.PlayerConnection
 import com.metrolist.android.utils.launchAsync
-import com.metrolist.shared.db.MusicDatabase
-import com.metrolist.shared.db.entities.toSongItem
-import com.metrolist.shared.db.refreshHistoryPlaylist
-import com.metrolist.shared.model.BuiltinPlaylist
 import com.metrolist.shared.state.SongLikeState
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
 import org.koin.core.context.GlobalContext
 import timber.log.Timber
 import java.util.UUID
@@ -37,16 +30,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 MusicWidgetReceiver.ACTION_NEXT,
                 MusicWidgetReceiver.ACTION_PREVIOUS,
                 MusicWidgetReceiver.ACTION_UPDATE_WIDGET,
-                PlaylistWidgetReceiver.ACTION_PLAY_TARGET,
                 -> intent.action
-
-                TurntableWidgetReceiver.ACTION_TURNTABLE_PLAY_PAUSE -> MusicWidgetReceiver.ACTION_PLAY_PAUSE
-
-                TurntableWidgetReceiver.ACTION_TURNTABLE_NEXT -> MusicWidgetReceiver.ACTION_NEXT
-
-                TurntableWidgetReceiver.ACTION_TURNTABLE_PREVIOUS -> MusicWidgetReceiver.ACTION_PREVIOUS
-
-                TurntableWidgetReceiver.ACTION_UPDATE_TURNTABLE_WIDGET -> MusicWidgetReceiver.ACTION_UPDATE_WIDGET
 
                 else -> null
             } ?: return
@@ -63,12 +47,6 @@ class WidgetActionReceiver : BroadcastReceiver() {
                         val widgets = AppWidgetManager.getInstance(context)
                         val manager = GlobalContext.get().get<MetrolistWidgetManager>()
                         manager.updateIdleMusicWidgets(widgets.getAppWidgetIds(ComponentName(context, MusicWidgetReceiver::class.java)))
-                        manager.updateIdleExpressiveWidgets(
-                            widgets.getAppWidgetIds(ComponentName(context, ExpressiveWidgetReceiver::class.java)),
-                        )
-                        manager.updateIdleTurntableWidgets(
-                            widgets.getAppWidgetIds(ComponentName(context, TurntableWidgetReceiver::class.java)),
-                        )
                         if (MusicService.isRunning) {
                             context.startService(Intent(context, MusicService::class.java).setAction(serviceAction))
                         }
@@ -92,35 +70,6 @@ class WidgetActionReceiver : BroadcastReceiver() {
                     MusicWidgetReceiver.ACTION_LIKE -> {
                         connection.awaitConnected()
                         connection.currentSong.value?.let(SongLikeState::toggleLike)
-                    }
-
-                    PlaylistWidgetReceiver.ACTION_PLAY_TARGET -> {
-                        val id = intent.getStringExtra(PlaylistWidgetReceiver.EXTRA_TARGET_ID) ?: return@launchAsync
-                        val title = intent.getStringExtra(PlaylistWidgetReceiver.EXTRA_TARGET_TITLE)
-                        val type =
-                            intent.getStringExtra(PlaylistWidgetReceiver.EXTRA_TARGET_TYPE)
-                        if (type == PlaylistWidgetReceiver.TARGET_TYPE_ONLINE && BuiltinPlaylist.fromId(id) == null) {
-                            connection.playPlaylist(id, title.orEmpty())
-                        } else {
-                            val songs =
-                                withContext(Dispatchers.IO) {
-                                    val database = GlobalContext.get().get<MusicDatabase>()
-                                    val builtin = widgetBuiltinPlaylist(type, id)
-                                    if (builtin != null) {
-                                        database.widgetBuiltinSongs(builtin)
-                                    } else if (type == PlaylistWidgetReceiver.TARGET_TYPE_LOCAL) {
-                                        database.refreshHistoryPlaylist(id)
-                                        database
-                                            .dao()
-                                            .playlistSongs(id)
-                                            .first()
-                                            .map { it.song.toSongItem() }
-                                    } else {
-                                        emptyList()
-                                    }
-                                }
-                            if (songs.isNotEmpty()) connection.playQueue(songs, queueTitle = title, finite = true)
-                        }
                     }
                 }
             } catch (error: CancellationException) {

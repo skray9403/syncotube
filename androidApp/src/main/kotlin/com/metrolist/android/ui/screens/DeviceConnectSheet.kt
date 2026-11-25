@@ -81,32 +81,53 @@ fun PlayerDeviceConnectSheet(
     val nectarController: NectarCastController = koinInject()
     val nectarSession by nectarController.sessionState.collectAsState()
 
-    val blePermission =
+    val blePermissions =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Manifest.permission.BLUETOOTH_SCAN
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+            )
         } else {
-            null
+            emptyArray()
         }
 
+    var bleScanGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
     var bleGranted by remember {
         mutableStateOf(
-            blePermission == null ||
-                ContextCompat.checkSelfPermission(context, blePermission) == PackageManager.PERMISSION_GRANTED,
+            blePermissions.all { perm ->
+                ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+            },
         )
     }
     val bleLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            bleGranted = granted
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            bleScanGranted =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                results[Manifest.permission.BLUETOOTH_SCAN] == true ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) ==
+                PackageManager.PERMISSION_GRANTED
+            bleGranted =
+                blePermissions.all { perm ->
+                    results[perm] == true ||
+                        ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+                }
+            nectarController.refreshAdvertising()
         }
 
     var nectarPeers by remember { mutableStateOf<List<NectarPeer>>(emptyList()) }
     var nectarScanning by remember { mutableStateOf(false) }
 
-    LaunchedEffect(permissionGranted, bleGranted) {
+    LaunchedEffect(permissionGranted, bleScanGranted) {
         nectarScanning = true
         try {
             nectarDiscovery
-                .scanAll(canUseLocalNetwork = permissionGranted, canScanBle = bleGranted)
+                .scanAll(canUseLocalNetwork = permissionGranted, canScanBle = bleScanGranted)
                 .collect { peers -> nectarPeers = peers }
         } finally {
             nectarScanning = false
@@ -114,6 +135,7 @@ fun PlayerDeviceConnectSheet(
     }
 
     LaunchedEffect(Unit) {
+        nectarController.refreshAdvertising()
         manager.refreshPairingState()
         if (Settings.shared.deviceConnectEnabled && permissionGranted && !manager.state.value.enabled) {
             manager.restoreIfEnabled(context.applicationContext)
@@ -133,8 +155,8 @@ fun PlayerDeviceConnectSheet(
                 peers = nectarPeers,
                 session = nectarSession,
                 isScanning = nectarScanning,
-                missingBlePermission = !bleGranted && blePermission != null,
-                onRequestBlePermission = { blePermission?.let(bleLauncher::launch) },
+                missingBlePermission = !bleGranted && blePermissions.isNotEmpty(),
+                onRequestBlePermission = { bleLauncher.launch(blePermissions) },
                 onSelectPeer = { peer -> nectarController.handoffTo(peer) },
                 onReturnToPhone = { nectarController.returnToThisPhone() },
             )

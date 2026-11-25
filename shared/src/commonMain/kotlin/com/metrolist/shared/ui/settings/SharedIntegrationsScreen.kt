@@ -96,8 +96,9 @@ data class SharedIntegrationsHost(
     val playback: IntegrationPlaybackState? = null,
     val playbackPosition: StateFlow<Long>? = null,
     val currentPositionMs: () -> Long = { playback?.positionMs ?: 0L },
-    val onStartDiscordLogin: (DiscordAuthSession) -> Unit,
+    val onStartDiscordLogin: (DiscordAuthSession) -> Unit = {},
     val onDiscordSettingsChanged: () -> Unit = {},
+    val includeSocialIntegrations: Boolean = true,
     val deviceConnect: DeviceConnectSettingsHost? = null,
     val listenTogetherManager: ListenTogetherManager? = null,
     val onOpenListenTogether: (() -> Unit)? = null,
@@ -127,8 +128,8 @@ fun SharedIntegrationsScreen(
     host: SharedIntegrationsHost,
     modifier: Modifier = Modifier,
 ) {
-    DisposableEffect(host.platform, Settings.shared.enableDiscordIntegration) {
-        discordSettingsVisible = Settings.shared.enableDiscordIntegration
+    DisposableEffect(host.platform, host.includeSocialIntegrations, Settings.shared.enableDiscordIntegration) {
+        discordSettingsVisible = host.includeSocialIntegrations && Settings.shared.enableDiscordIntegration
         onDispose { discordSettingsVisible = false }
     }
     val scope = rememberCoroutineScope()
@@ -172,16 +173,16 @@ fun SharedIntegrationsScreen(
             bottomContentPadding = host.bottomContentPadding,
             initialPage = host.initialPage?.takeUnless { it == SettingsPageId.LISTEN_TOGETHER },
             singlePane = true,
-            externalPages = setOf(SettingsPageId.LISTEN_TOGETHER),
+            externalPages = if (host.includeSocialIntegrations) setOf(SettingsPageId.LISTEN_TOGETHER) else emptySet(),
             onOpenPage = { page ->
                 when (page) {
-                    SettingsPageId.LISTEN_TOGETHER -> host.onOpenListenTogether?.invoke() ?: run { showListenTogether = true }
+                    SettingsPageId.LISTEN_TOGETHER -> if (host.includeSocialIntegrations) host.onOpenListenTogether?.invoke() ?: run { showListenTogether = true }
                     else -> Unit
                 }
             },
-            refreshablePages = setOf(SettingsPageId.DISCORD),
+            refreshablePages = if (host.includeSocialIntegrations) setOf(SettingsPageId.DISCORD) else emptySet(),
             onPageRefresh = { pageId ->
-                if (pageId == SettingsPageId.DISCORD) {
+                if (host.includeSocialIntegrations && pageId == SettingsPageId.DISCORD) {
                     refreshDiscordPresence(host, discordPresenceStrings)
                 }
             },
@@ -236,6 +237,16 @@ private fun buildIntegrationsRegistry(
 ): SettingsUiRegistry {
     val settings = Settings.shared
     val builder = SettingsUiRegistryBuilder()
+    if (!host.includeSocialIntegrations) {
+        host.deviceConnect?.let { builder.deviceConnectPage(it) }
+        builder.rootGroup(
+            stringResource(Res.string.integrations),
+            *listOfNotNull(
+                SettingsPageId.DEVICE_CONNECT.takeIf { host.deviceConnect != null },
+            ).toTypedArray(),
+        )
+        return builder.build()
+    }
     val discordUsername = currentUser?.username?.ifBlank { null } ?: settings.discordUsername
     val discordLoggedIn = !accessToken.isNullOrBlank()
     val discordSettingsEnabled = settings.enableDiscordIntegration && discordLoggedIn

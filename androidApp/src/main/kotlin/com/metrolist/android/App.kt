@@ -18,7 +18,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.service.quicksettings.TileService
 import android.util.Log
 import android.webkit.WebView
 import androidx.compose.runtime.snapshotFlow
@@ -34,43 +33,25 @@ import com.metrolist.android.di.appModule
 import com.metrolist.android.locale.AppLocale
 import com.metrolist.android.onboarding.LegacyInstallMigration
 import com.metrolist.android.onboarding.OnboardingManager
-import com.metrolist.android.onboarding.shouldApplyTvContinuePlaybackDefault
 import com.metrolist.android.playback.AudioCacheManager
 import com.metrolist.android.playback.DownloadService
 import com.metrolist.android.playback.MusicService
 import com.metrolist.android.playback.SongDownloadManager
-import com.metrolist.android.playlistimport.AndroidPlaylistImportNotifier
-import com.metrolist.android.quicksettings.MusicRecognizerTileService
-import com.metrolist.android.recognition.MusicRecognitionService
-import com.metrolist.android.scrobble.LastFmSessionNotification
 import com.metrolist.android.ui.GlobalPlaybackNetworkMonitor
 import com.metrolist.android.update.AppUpdateManager
 import com.metrolist.android.utils.CrashHandler
 import com.metrolist.android.utils.IconUtils
 import com.metrolist.android.utils.SentryManager
 import com.metrolist.android.utils.createAppImageLoader
-import com.metrolist.android.utils.isAndroidTv
-import com.metrolist.android.widget.ExpressiveWidgetReceiver
 import com.metrolist.android.widget.MetrolistWidgetManager
 import com.metrolist.android.widget.MusicWidgetReceiver
-import com.metrolist.android.widget.PlaylistWidgetReceiver
-import com.metrolist.android.widget.RecognizerWidgetReceiver
-import com.metrolist.android.widget.RecognizerWidgets
-import com.metrolist.android.widget.TurntableWidgetReceiver
 import com.metrolist.android.widget.WidgetThemeConfig
-import com.metrolist.shared.api.lastfm.LastFM
-import com.metrolist.shared.api.lastfm.LastFmGalleryBrowser
 import com.metrolist.shared.auth.AuthManager
 import com.metrolist.shared.db.MusicDatabase
 import com.metrolist.shared.db.checkAndroidDatabaseVersion
-import com.metrolist.shared.discord.DiscordRpcManager
-import com.metrolist.shared.discord.DiscordTokenStore
-import com.metrolist.shared.discord.observeDiscordInitialization
 import com.metrolist.shared.equalizer.EqualizerProfiles
-import com.metrolist.shared.listentogether.network.isAllowedListenTogetherServerUrl
 import com.metrolist.shared.settings.BlockedContent
 import com.metrolist.shared.settings.Settings
-import com.metrolist.shared.state.GlobalYouTube
 import com.metrolist.shared.state.SongLikeState
 import com.metrolist.shared.state.SongMetadataState
 import com.metrolist.shared.state.coreModule
@@ -100,7 +81,6 @@ import timber.log.Timber
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
-import com.metrolist.shared.BuildConfig as SharedBuildConfig
 
 class App :
     Application(),
@@ -170,7 +150,14 @@ class App :
         AndroidContextProvider.applicationContext = applicationContext
         val processName = currentProcessName()
         if (processName == packageName) {
-            Settings.shared.hasCanvasToggle = true
+            Settings.shared.hasCanvasToggle = false
+            Settings.shared.enableAnimatedCovers = false
+            Settings.shared.playerCanvasEnabled = false
+            Settings.shared.musicVideoPlaybackEnabled = false
+            Settings.shared.playVideosInMiniPlayer = false
+            Settings.shared.enableAppleMusicArtistImages = false
+            Settings.shared.enableAppleMusicArtistVideos = false
+            Settings.shared.voiceSearchEnabled = false
             recovery.run { initializeMainProcess() }
             return
         }
@@ -222,10 +209,6 @@ class App :
         val manager = AppWidgetManager.getInstance(this)
         listOf(
             MusicWidgetReceiver::class.java,
-            ExpressiveWidgetReceiver::class.java,
-            PlaylistWidgetReceiver::class.java,
-            TurntableWidgetReceiver::class.java,
-            RecognizerWidgetReceiver::class.java,
         ).forEach { receiver ->
             val component = ComponentName(this, receiver)
             val ids = manager.getAppWidgetIds(component)
@@ -287,18 +270,14 @@ class App :
 
     private fun initializeApp(appStart: Long) {
         checkAndroidDatabaseVersion(this)
-        LastFM.initialize(SharedBuildConfig.LASTFM_API_KEY, SharedBuildConfig.LASTFM_SECRET)
-        LastFM.renderedPageLoader = LastFmGalleryBrowser::load
         playbackNetworkMonitor.start()
         AppLocale.sync(this)
         onboardingManager = OnboardingManager(this)
         legacyInstallMigration = LegacyInstallMigration(this)
         hadLegacyInstallationAtStartup = legacyInstallMigration.hasLegacyInstallation()
-        applyTvContinuePlaybackDefault()
         if (hadLegacyInstallationAtStartup) Settings.shared.migrateLegacyV13AccountSettings()
         setPlaybackServicesEnabled(onboardingManager.isComplete)
         migrateTelemetryConsent()
-        migrateCleartextIntegrations()
         migrateLegacyEqualizerProfiles()
         EqualizerProfiles.ensureDefaultProfile()
 
@@ -314,13 +293,6 @@ class App :
             modules(coreModule, sharedModule, appModule)
         }
         Timber.tag(TAG).d("Koin init complete elapsed=%dms", SystemClock.elapsedRealtime() - koinStart)
-
-        get<CoroutineScope>().launch(Dispatchers.Main.immediate) {
-            observeDiscordInitialization {
-                DiscordTokenStore.init(this@App)
-                DiscordRpcManager.init(GlobalYouTube.client)
-            }
-        }
 
         get<CoroutineScope>().launch {
             IconUtils.syncWithPreference(this@App)
@@ -350,8 +322,6 @@ class App :
                 .setName(getString(R.string.completed_downloads))
                 .build(),
         )
-        AndroidPlaylistImportNotifier.ensureChannel(this)
-        LastFmSessionNotification.register(this)
 
         Timber.tag(TAG).d("App onCreate complete elapsed=%dms", SystemClock.elapsedRealtime() - appStart)
     }
@@ -362,39 +332,12 @@ class App :
         EqualizerProfiles.migrateLegacy(legacy.getString("eq_profiles", null), legacy.getString("active_profile_id", null))
     }
 
-    private fun migrateCleartextIntegrations() {
-        if (!isAllowedListenTogetherServerUrl(Settings.shared.listenTogetherServerUrl)) {
-            Settings.shared.listenTogetherServerUrl = Settings.DEFAULT_LISTEN_TOGETHER_SERVER_URL
-        }
-        Settings.shared.listenTogetherCustomServers =
-            Settings.shared.listenTogetherCustomServers
-                .lineSequence()
-                .filter(::isAllowedListenTogetherServerUrl)
-                .joinToString("\n")
-    }
-
     private fun migrateTelemetryConsent() {
         if (!isCrashReportingAvailable()) return
         val preferences = getSharedPreferences("metrolist_security_migrations", MODE_PRIVATE)
         if (!preferences.getBoolean("telemetry_consent_v1", false)) {
             Settings.shared.sentryEnabled = false
             preferences.edit { putBoolean("telemetry_consent_v1", true) }
-        }
-    }
-
-    private fun applyTvContinuePlaybackDefault() {
-        val preferences = getSharedPreferences("metrolist_onboarding", MODE_PRIVATE)
-        val applied = preferences.getBoolean("tv_continue_playback_default_v1", false)
-        if (
-            shouldApplyTvContinuePlaybackDefault(
-                isTv = isAndroidTv(),
-                hasLegacyInstallation = hadLegacyInstallationAtStartup,
-                onboardingComplete = onboardingManager.isComplete,
-                migrationApplied = applied,
-            )
-        ) {
-            Settings.shared.promptContinuePlayback = true
-            preferences.edit { putBoolean("tv_continue_playback_default_v1", true) }
         }
     }
 
@@ -430,20 +373,6 @@ class App :
             SongLikeState.recoverDatabaseLikes(get<MusicDatabase>())
         }
         get<CoroutineScope>().launch(Dispatchers.IO) { SentryManager.reportPlaybackClientStats() }
-        get<CoroutineScope>().launch {
-            MusicRecognitionService.status.collect {
-                try {
-                    TileService.requestListeningState(this@App, ComponentName(this@App, MusicRecognizerTileService::class.java))
-                } catch (_: IllegalArgumentException) {
-                    // Secondary profiles such as MIUI's Dual Apps (user 999) cannot host Quick Settings tiles.
-                }
-            }
-        }
-        get<CoroutineScope>().launch {
-            MusicRecognitionService.status.collectLatest {
-                RecognizerWidgets.update(this@App)
-            }
-        }
         observeWidgetThemeChanges()
         SongMetadataState.bind(get<MusicDatabase>(), get<CoroutineScope>())
         get<SongDownloadManager>().observeTrackedPlaylists(get<CoroutineScope>())

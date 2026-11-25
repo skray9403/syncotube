@@ -7,24 +7,15 @@
 
 package com.metrolist.android.ui.screens
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.speech.RecognizerIntent
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -50,9 +41,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarDefaults
@@ -119,7 +108,6 @@ import com.metrolist.shared.generated.resources.artist_link
 import com.metrolist.shared.generated.resources.pin_to_speed_dial
 import com.metrolist.shared.generated.resources.play_playlist
 import com.metrolist.shared.generated.resources.playlist_link
-import com.metrolist.shared.generated.resources.recognize_music
 import com.metrolist.shared.generated.resources.remove_from_speed_dial
 import com.metrolist.shared.generated.resources.search_history_removal_failed
 import com.metrolist.shared.generated.resources.share
@@ -127,8 +115,6 @@ import com.metrolist.shared.generated.resources.share_podcast
 import com.metrolist.shared.generated.resources.share_song
 import com.metrolist.shared.generated.resources.shuffle_playlist
 import com.metrolist.shared.generated.resources.unable_to_load_podcast
-import com.metrolist.shared.generated.resources.voice_search_prompt
-import com.metrolist.shared.generated.resources.voice_search_unavailable
 import com.metrolist.shared.generated.resources.youtube_music
 import com.metrolist.shared.model.AlbumItem
 import com.metrolist.shared.model.ArtistItem
@@ -142,7 +128,6 @@ import com.metrolist.shared.model.toSongItem
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.state.GlobalYouTubeRepository
 import com.metrolist.shared.state.SongLikeState
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.CollectionPreviews
 import com.metrolist.shared.ui.components.PopupContent
 import com.metrolist.shared.ui.icons.MetrolistIcons
@@ -166,14 +151,12 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun SearchScreen(
     navigator: Navigator,
-    floatingActionsBottomInset: State<Dp>,
+    @Suppress("UNUSED_PARAMETER") floatingActionsBottomInset: State<Dp>,
     initialQuery: String? = null,
     onInitialQueryConsumed: () -> Unit = {},
     onSearchResultsVisible: (Boolean) -> Unit = {},
     searchViewModel: SearchViewModel = koinViewModel(),
 ) {
-    val voiceSearchPromptText = stringResource(Res.string.voice_search_prompt)
-    val voiceSearchUnavailableText = stringResource(Res.string.voice_search_unavailable)
     val shareSongText = stringResource(Res.string.share_song)
     val albumLinkText = stringResource(Res.string.album_link)
     val artistLinkText = stringResource(Res.string.artist_link)
@@ -241,7 +224,6 @@ fun SearchScreen(
     }
 
     val miniPlayerInset = LocalMiniPlayerBottomInset.current
-    val isTv = LocalIsTv.current
     val density = LocalDensity.current
     val fullWindowWidth =
         with(density) {
@@ -258,7 +240,6 @@ fun SearchScreen(
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val voiceSearchEnabled = Settings.shared.voiceSearchEnabled
     val isPlayerExpanded = LocalPlayerExpanded.current
     var showFloatingAction by remember { mutableStateOf(true) }
 
@@ -368,30 +349,6 @@ fun SearchScreen(
         }
     }
 
-    val voiceSearchLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                result.data
-                    ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                    ?.firstOrNull()
-                    ?.let(submitSearch)
-            }
-        }
-
-    val launchVoiceSearch = {
-        val intent =
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_PROMPT, voiceSearchPromptText)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            }
-        if (intent.resolveActivity(context.packageManager) != null) {
-            voiceSearchLauncher.launch(intent)
-        } else {
-            Toast.makeText(context, voiceSearchUnavailableText, Toast.LENGTH_SHORT).show()
-        }
-    }
-
     LaunchedEffect(initialQuery) {
         val queryFromIntent = initialQuery?.trim().orEmpty()
         if (queryFromIntent.isNotEmpty() && queryFromIntent != query) {
@@ -401,8 +358,8 @@ fun SearchScreen(
         if (initialQuery != null) onInitialQueryConsumed()
     }
 
-    LaunchedEffect(isQuerySubmitted, initialQuery, isTv, isPlayerExpanded) {
-        if (isTv || isPlayerExpanded) {
+    LaunchedEffect(isQuerySubmitted, initialQuery, isPlayerExpanded) {
+        if (isPlayerExpanded) {
             keyboardController?.hide()
         } else if (!isQuerySubmitted && initialQuery.isNullOrBlank()) {
             if (!searchViewModel.hasRequestedInitialFocus && query.isEmpty()) {
@@ -480,7 +437,7 @@ fun SearchScreen(
                             dismissKeyboardAndFocus()
                             if (item is SongItem) {
                                 searchViewModel.shared.addPlayedSearchSong(item)
-                                playSong(item, playerConnection, scope, startVideo = true)
+                                playSong(item, playerConnection, scope, startVideo = false)
                             }
                         },
                         onItemClick = { item ->
@@ -577,37 +534,10 @@ fun SearchScreen(
                             }
                         },
                         itemContainer = itemContainer,
-                        onMicrophoneClick =
-                            if (voiceSearchEnabled) {
-                                launchVoiceSearch
-                            } else {
-                                { navigator.navigate(Screen.Recognition) }
-                            },
+                        onMicrophoneClick = null,
                         focusRequester = focusRequester,
                         searchBarEndPadding = searchBarEndPadding,
                         modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = !isQuerySubmitted && (isTv || showFloatingAction) && !isImeVisible,
-                enter = fadeIn() + slideInVertically { it / 2 },
-                exit = fadeOut() + slideOutVertically { it / 2 },
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = maxOf(imeBottomInset, floatingActionsBottomInset.value) + 16.dp),
-            ) {
-                FloatingActionButton(
-                    onClick = { navigator.navigate(Screen.Recognition) },
-                    shape = RoundedCornerShape(12.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    Icon(
-                        imageVector = MetrolistIcons.Outlined.AudioCapture,
-                        contentDescription = stringResource(Res.string.recognize_music),
                     )
                 }
             }

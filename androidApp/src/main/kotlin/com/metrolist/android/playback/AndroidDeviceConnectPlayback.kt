@@ -10,17 +10,12 @@ import com.metrolist.android.deviceconnect.toPlayerRepeatMode
 import com.metrolist.android.nectarcast.NectarCastRegistry
 import com.metrolist.shared.deviceconnect.DcLocalPlaybackState
 import com.metrolist.shared.deviceconnect.DcPlaybackSnapshot
-import com.metrolist.shared.deviceconnect.DcScrobbleSession
 import com.metrolist.shared.deviceconnect.DeviceConnectPlaybackPort
-import com.metrolist.shared.discord.DiscordRpcManager
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.playback_unable_to_play_queued_track
 import com.metrolist.shared.model.SongItem
-import com.metrolist.shared.model.isVideoSong
 import com.metrolist.shared.playback.MusicQueueSnapshot
 import com.metrolist.shared.playback.PlaybackSeekSource
-import com.metrolist.shared.scrobble.ScrobbleManager
-import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.utils.Logger
 import com.metrolist.shared.youtube.playback.PlaybackResource
 import kotlinx.coroutines.Dispatchers
@@ -48,9 +43,7 @@ internal class AndroidDeviceConnectPlayback(
     private val context: Context,
     private val player: AndroidPlaybackPlayer,
     private val queue: AndroidQueueCoordinator,
-    private val video: AndroidVideoModeController,
     private val transitions: AndroidQueueTransitions,
-    private val scrobbleManager: ScrobbleManager,
     private val history: AndroidListeningHistory,
     private val repeatMode: MutableStateFlow<Int>,
     private val shuffleModeEnabled: MutableStateFlow<Boolean>,
@@ -58,7 +51,6 @@ internal class AndroidDeviceConnectPlayback(
     private val isCasting: () -> Boolean,
     private val onSave: () -> Unit,
     private val onQueueCleared: () -> Unit,
-    private val onDiscordUpdate: () -> Unit,
 ) {
     var playbackReleased = false
         private set
@@ -106,7 +98,7 @@ internal class AndroidDeviceConnectPlayback(
                                     ?.id,
                         finite = queue.isFiniteQueue,
                         explicitRadioQueue = queue.explicitRadioQueue,
-                        scrobbleSession = scrobbleManager.session(),
+                        scrobbleSession = null,
                     )
                 }
 
@@ -166,17 +158,11 @@ internal class AndroidDeviceConnectPlayback(
                 if (song == null) {
                     player.stop()
                 } else if (trackChanged) {
-                    video.clearVideoMode()
                     player.pause()
-                    val wantVideo =
-                        shouldRequestQueueVideo(
-                            isVideoSong = song.isVideoSong,
-                            videoPlaybackEnabled = Settings.shared.musicVideoPlaybackEnabled,
-                        )
                     val started =
                         queue.withQueueLoading(isPlaybackLoading = true) {
                             val resource =
-                                fetchPlaybackResource(song, wantVideo)
+                                fetchPlaybackResource(song, false)
                                     ?: throw IOException(getString(Res.string.playback_unable_to_play_queued_track))
                             if (playbackReleased || !shouldCommit()) return@withQueueLoading false
                             player.prepareAndPlay(
@@ -192,12 +178,6 @@ internal class AndroidDeviceConnectPlayback(
                     if (playbackReleased || !shouldCommit()) return@withContext
                     if (!started) throw IOException(getString(Res.string.playback_unable_to_play_queued_track))
                     if (desired.playing) player.resume() else player.pause()
-                    val hasVideo =
-                        shouldActivateQueueVideoMode(
-                            videoRequested = wantVideo,
-                            resolvedResourceHasVideo = player.currentPlaybackResource.value?.hasVideo == true,
-                        )
-                    video.onQueuePlaybackStarted(song, hasVideo, player.currentPlaybackResource.value)
                 } else {
                     if (abs(player.getRealtimePositionMs() - targetPosition()) >
                         150L
@@ -210,12 +190,6 @@ internal class AndroidDeviceConnectPlayback(
                 appliedSyncSessionId = snapshot.sessionId
                 appliedSyncTrackRevision = snapshot.trackRevision
                 syncTargetLoaded = true
-                scrobbleManager.setReportingEnabled(
-                    history.enabled,
-                    song,
-                    player.isPlaying.value,
-                    desired.scrobbleSession,
-                )
                 if (!queue.isFiniteQueue && queue.recommendationBootstrapJob == null && song != null &&
                     (!desired.explicitRadioQueue || explicitRadioBootstrapPending)
                 ) {
@@ -267,7 +241,6 @@ internal class AndroidDeviceConnectPlayback(
                     provisional && playback?.queue?.displayedItems?.isEmpty() == true
                 if (playback != null && controllerPlayback?.queue != playback.queue) {
                     transitions.cancelNextTrackPreload()
-                    video.clearVideoMode()
                     queue.resetQueueSession(
                         playback.queue.originalItems
                             .firstOrNull()
@@ -286,11 +259,6 @@ internal class AndroidDeviceConnectPlayback(
                 controllerPlayback = playback
                 player.setControllerPlayback(playback)
                 if (clearsQueue) onQueueCleared()
-                if (playback !=
-                    null
-                ) {
-                    scrobbleManager.setReportingEnabled(false, player.currentSong.value, playback.playing, playback.scrobbleSession)
-                }
             }
 
             override suspend fun setPlaying(playing: Boolean) =
@@ -328,9 +296,6 @@ internal class AndroidDeviceConnectPlayback(
                 history.setEnabled(enabled)
                 if (reportingChanged) Logger.i(REPORTING_TAG, "platform reporting enabled=$enabled")
                 player.setExternalReportingEnabled(enabled)
-                val song = player.currentSong.value
-                scrobbleManager.setReportingEnabled(enabled, song, player.isPlaying.value, session)
-                if (!enabled) DiscordRpcManager.clear() else onDiscordUpdate()
             }
         }
 

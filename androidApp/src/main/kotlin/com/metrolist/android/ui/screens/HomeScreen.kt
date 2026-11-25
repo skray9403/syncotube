@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -34,7 +33,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -54,8 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -85,9 +81,6 @@ import com.metrolist.shared.generated.resources.home_offline_empty
 import com.metrolist.shared.generated.resources.no_playable_items
 import com.metrolist.shared.generated.resources.pin_to_speed_dial
 import com.metrolist.shared.generated.resources.player_not_ready
-import com.metrolist.shared.generated.resources.recognize_music
-import com.metrolist.shared.generated.resources.refresh
-import com.metrolist.shared.generated.resources.refreshing
 import com.metrolist.shared.generated.resources.shuffle
 import com.metrolist.shared.generated.resources.try_again
 import com.metrolist.shared.generated.resources.unpin_from_speed_dial
@@ -96,7 +89,6 @@ import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.YTItem
 import com.metrolist.shared.model.isAvailableOffline
 import com.metrolist.shared.settings.LibraryFilterType
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.ChipShelf
 import com.metrolist.shared.ui.components.HomeLoadingPlaceholder
 import com.metrolist.shared.ui.components.PopupVisibility
@@ -106,8 +98,6 @@ import com.metrolist.shared.ui.navigation.LocalRootContentActive
 import com.metrolist.shared.ui.screens.HomeContent
 import com.metrolist.shared.ui.screens.HomeShelf
 import com.metrolist.shared.ui.screens.homeContentText
-import com.metrolist.shared.ui.tv.RequestTvFocus
-import com.metrolist.shared.ui.tv.tvFocusHighlight
 import com.metrolist.shared.ui.wrapped.WrappedHomeCard
 import com.metrolist.shared.youtube.playback.PlaybackNetworkStateStore
 import kotlinx.coroutines.flow.Flow
@@ -129,7 +119,6 @@ fun HomeScreen(
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToPlaylist: (String, String?) -> Unit = { _, _ -> },
     onNavigateToPodcast: (String) -> Unit = {},
-    onNavigateToRecognition: () -> Unit = {},
     onNavigateToWrapped: () -> Unit = {},
     onNavigateToBrowse: (String, String?, String) -> Unit = { _, _, _ -> },
     onNavigateToVideoBrowse: (String, String?, String) -> Unit = onNavigateToBrowse,
@@ -182,8 +171,6 @@ fun HomeScreen(
     var showSpeedDialSurpriseMenu by remember { mutableStateOf(false) }
     val authManager = remember { AuthManager() }
     var isRefreshing by remember { mutableStateOf(false) }
-    val showTopRefreshIndicator = isRefreshing || uiState.isRefreshing
-    val isTv = LocalIsTv.current
     var showFloatingActions by remember { mutableStateOf(true) }
     val fabNestedScrollConnection =
         remember {
@@ -207,11 +194,7 @@ fun HomeScreen(
 
     val miniPlayerInset = LocalMiniPlayerBottomInset.current
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val enablePullToRefresh = !isTv
     val topPadding = tabContentTopPadding()
-
-    val initialTvFocusRequester = remember { FocusRequester() }
-    RequestTvFocus(initialTvFocusRequester, enabled = rootActive && !showTopRefreshIndicator)
 
     fun shuffleHomeContent() {
         if (playerConnection == null) {
@@ -293,25 +276,6 @@ fun HomeScreen(
                     }.focusGroup()
                     .focusRestorer(),
             header = {
-                if (isTv) {
-                    item(key = "tv_refresh") {
-                        Button(
-                            onClick = {
-                                isRefreshing = true
-                                viewModel.shared.refresh { isRefreshing = false }
-                            },
-                            enabled = rootActive && !showTopRefreshIndicator,
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    .focusRequester(initialTvFocusRequester)
-                                    .tvFocusHighlight(),
-                            shapes = ButtonDefaults.shapes(),
-                        ) {
-                            Text(stringResource(if (showTopRefreshIndicator) Res.string.refreshing else Res.string.refresh))
-                        }
-                    }
-                }
                 when {
                     uiState.showLoadingPlaceholder -> {
                         item(key = "home_loading") {
@@ -364,71 +328,49 @@ fun HomeScreen(
     Box(
         modifier = Modifier.fillMaxSize().nestedScroll(fabNestedScrollConnection),
     ) {
-        if (enablePullToRefresh) {
-            val pullToRefreshState = rememberPullToRefreshState()
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = {
-                    isRefreshing = true
-                    viewModel.shared.refresh { isRefreshing = false }
-                },
-                state = pullToRefreshState,
-                indicator = {
-                    RefreshIndicator(
-                        state = pullToRefreshState,
-                        isRefreshing = isRefreshing,
-                        modifier =
-                            Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = topPadding),
-                    )
-                },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                homeContent()
-            }
-        } else {
+        val pullToRefreshState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                isRefreshing = true
+                viewModel.shared.refresh { isRefreshing = false }
+            },
+            state = pullToRefreshState,
+            indicator = {
+                RefreshIndicator(
+                    state = pullToRefreshState,
+                    isRefreshing = isRefreshing,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = topPadding),
+                )
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
             homeContent()
         }
 
-        if (!isTv) {
-            AnimatedVisibility(
-                visible = (LocalIsTv.current || showFloatingActions),
-                enter = fadeIn() + slideInVertically { it / 2 },
-                exit = fadeOut() + slideOutVertically { it / 2 },
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(
-                            bottom = floatingActionsBottomInset.value,
-                        ),
+        AnimatedVisibility(
+            visible = showFloatingActions,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        bottom = floatingActionsBottomInset.value,
+                    ),
+        ) {
+            FloatingActionButton(
+                onClick = ::shuffleHomeContent,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.padding(16.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    SmallFloatingActionButton(
-                        onClick = onNavigateToRecognition,
-                        shape = RoundedCornerShape(8.dp),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Icon(
-                            imageVector = MetrolistIcons.Outlined.AudioCapture,
-                            contentDescription = stringResource(Res.string.recognize_music),
-                        )
-                    }
-                    FloatingActionButton(
-                        onClick = ::shuffleHomeContent,
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = MetrolistIcons.Rounded.Shuffle,
-                            contentDescription = stringResource(Res.string.shuffle),
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = MetrolistIcons.Rounded.Shuffle,
+                    contentDescription = stringResource(Res.string.shuffle),
+                )
             }
         }
     }

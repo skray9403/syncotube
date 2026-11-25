@@ -1,7 +1,6 @@
 package com.metrolist.android.playback
 
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.shared.cast.CastDevice
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.indexOfPlaylistOccurrence
@@ -26,9 +25,8 @@ class AndroidPlaybackController(
     override val wrappedSoundtrackAllowed =
         combine(
             connection.castState,
-            AndroidListenTogetherManager.playbackRequired,
             AndroidDeviceConnect.manager.remote.state,
-        ) { cast, inRoom, remote -> !cast.isConnected && !inRoom && remote.sessionId == null }
+        ) { cast, remote -> !cast.isConnected && remote.sessionId == null }
 
     private val baseState =
         combine(

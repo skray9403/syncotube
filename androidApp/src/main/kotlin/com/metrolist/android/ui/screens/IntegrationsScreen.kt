@@ -11,7 +11,7 @@ import com.metrolist.android.ui.screens.settings.IntegrationsScreen as SettingsI
 @Composable
 fun IntegrationsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToListenTogether: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onNavigateToListenTogether: () -> Unit = {},
 ) {
-    SettingsIntegrationsScreen(onNavigateBack = onNavigateBack, onNavigateToListenTogether = onNavigateToListenTogether)
+    SettingsIntegrationsScreen(onNavigateBack = onNavigateBack)
 }

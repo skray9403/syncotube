@@ -356,20 +356,22 @@ internal fun SettingsUiRegistryBuilder.registerAppearanceSettings(host: SharedSe
                         description = stringResource(Res.string.settings_mini_player_overview),
                     )
                 }
-                switch(
-                    id = "playVideosInMiniPlayer",
-                    title = stringResource(Res.string.appearance_play_videos_in_mini_player),
-                    description =
-                        stringResource(
-                            if (settings.musicVideoPlaybackEnabled) {
-                                Res.string.appearance_play_videos_in_mini_player_desc
-                            } else {
-                                Res.string.mini_player_video_prerequisite
-                            },
-                        ),
-                    enabled = settings.musicVideoPlaybackEnabled,
-                    checked = settings.playVideosInMiniPlayer,
-                ) { settings.playVideosInMiniPlayer = it }
+                if (host.supportsMusicVideo) {
+                    switch(
+                        id = "playVideosInMiniPlayer",
+                        title = stringResource(Res.string.appearance_play_videos_in_mini_player),
+                        description =
+                            stringResource(
+                                if (settings.musicVideoPlaybackEnabled) {
+                                    Res.string.appearance_play_videos_in_mini_player_desc
+                                } else {
+                                    Res.string.mini_player_video_prerequisite
+                                },
+                            ),
+                        enabled = settings.musicVideoPlaybackEnabled,
+                        checked = settings.playVideosInMiniPlayer,
+                    ) { settings.playVideosInMiniPlayer = it }
+                }
                 inlineSlider(
                     id = "swipeSensitivity",
                     title = stringResource(Res.string.appearance_mini_player_swipe_sensitivity),
@@ -468,12 +470,14 @@ internal fun SettingsUiRegistryBuilder.registerAppearanceSettings(host: SharedSe
                         checked = settings.forceBottomNavBar,
                         description = stringResource(Res.string.settings_bottom_navigation_summary),
                     ) { settings.forceBottomNavBar = it }
-                    switch(
-                        id = "voiceSearch",
-                        title = stringResource(Res.string.voice_search),
-                        description = stringResource(Res.string.voice_search_setting_desc),
-                        checked = settings.voiceSearchEnabled,
-                    ) { settings.voiceSearchEnabled = it }
+                    if (host.supportsVoiceSearch) {
+                        switch(
+                            id = "voiceSearch",
+                            title = stringResource(Res.string.voice_search),
+                            description = stringResource(Res.string.voice_search_setting_desc),
+                            checked = settings.voiceSearchEnabled,
+                        ) { settings.voiceSearchEnabled = it }
+                    }
                 }
             }
         }

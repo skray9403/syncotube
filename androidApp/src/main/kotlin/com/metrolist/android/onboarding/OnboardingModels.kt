@@ -14,5 +14,4 @@ internal data class OnboardingAccount(
     val imageUrl: String?,
     val fallbackIcon: ImageVector,
     val fetchGoogleImage: Boolean = false,
-    val fetchLastFmImage: Boolean = false,
 )

@@ -7,16 +7,18 @@ package com.metrolist.android.di
 
 import coil3.ImageLoader
 import coil3.imageLoader
+import com.metrolist.android.nectarcast.LanNectarTransportBridge
+import com.metrolist.android.nectarcast.NectarCastAdvertiser
 import com.metrolist.android.nectarcast.NectarCastController
 import com.metrolist.android.nectarcast.NectarCastDiscovery
+import com.metrolist.android.nectarcast.NectarCastRegistry
+import com.metrolist.android.nectarcast.NectarDeviceIdentity
 import com.metrolist.android.nectarcast.NectarTransportBridge
-import com.metrolist.android.nectarcast.StubNectarTransportBridge
 import com.metrolist.android.playback.AudioCacheManager
 import com.metrolist.android.playback.ExoPlaybackBenchmarkPlayer
 import com.metrolist.android.playback.PlayerConnection
 import com.metrolist.android.playback.SongDownloadManager
 import com.metrolist.android.widget.MetrolistWidgetManager
-import com.metrolist.android.widget.PlaylistWidgetManager
 import com.metrolist.innertubex.InnerTube
 import com.metrolist.innertubex.cipher.RemotePlayerConfigStore
 import com.metrolist.innertubex.cipher.YouTubeCipherService
@@ -40,6 +42,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -79,21 +82,46 @@ val appModule =
             )
         }
 
+        single<NectarDeviceIdentity> {
+            NectarDeviceIdentity(context = androidContext())
+        }
+
+        single<NectarCastAdvertiser> {
+            NectarCastAdvertiser(
+                context = androidContext(),
+                identity = get(),
+            )
+        }
+
         single<NectarTransportBridge> {
-            StubNectarTransportBridge()
+            LanNectarTransportBridge(
+                scope = get(),
+                advertiser = get(),
+            )
         }
 
         single<NectarCastDiscovery> {
             NectarCastDiscovery(
                 context = androidContext(),
+                localDeviceId = get<NectarDeviceIdentity>().deviceId,
                 transport = get(),
             )
         }
 
-        single<NectarCastController> {
+        single<NectarCastController>(createdAtStart = true) {
             NectarCastController(
                 scope = get(),
                 transport = get(),
+                ensurePort = {
+                    NectarCastRegistry.port ?: run {
+                        runCatching {
+                            withContext(Dispatchers.Main.immediate) {
+                                get<PlayerConnection>().awaitConnected()
+                            }
+                        }
+                        NectarCastRegistry.port
+                    }
+                },
             )
         }
 
@@ -108,19 +136,9 @@ val appModule =
             )
         }
 
-        single<PlaylistWidgetManager> {
-            PlaylistWidgetManager(
-                context = androidContext(),
-                database = get(),
-                applicationScope = get(),
-                imageLoader = get(),
-            )
-        }
-
         single<MetrolistWidgetManager> {
             MetrolistWidgetManager(
                 context = androidContext(),
-                playlistWidgetManager = get(),
                 imageLoader = get(),
             )
         }

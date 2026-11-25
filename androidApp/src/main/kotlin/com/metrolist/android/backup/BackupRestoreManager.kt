@@ -35,7 +35,6 @@ import com.metrolist.shared.db.DATABASE_VERSION
 import com.metrolist.shared.db.MusicDatabase
 import com.metrolist.shared.db.entities.toSongItem
 import com.metrolist.shared.db.getDatabaseBuilder
-import com.metrolist.shared.discord.DiscordTokenStore
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.settings.ArtistNameAliases
 import com.metrolist.shared.settings.PortableSettings
@@ -192,7 +191,6 @@ class BackupRestoreManager(
     private suspend fun backup(writeArchive: (File) -> Unit): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                DiscordTokenStore.migrateLegacyCredentials(context)
                 Settings.shared.flush()
                 database.useReaderConnection { }
                 val databasePath = context.getDatabasePath(BACKUP_DATABASE_ENTRY).path
@@ -579,7 +577,6 @@ class BackupRestoreManager(
         fun applyPendingRestore(context: Context) {
             val pending = pendingRestore(context)
             if (!pending.request.exists()) return
-            DiscordTokenStore.migrateLegacyCredentials(context)
             val request = json.decodeFromString<PendingRestoreRequest>(pending.request.readText())
             pending.install(
                 currentDatabase = context.getDatabasePath(BACKUP_DATABASE_ENTRY),

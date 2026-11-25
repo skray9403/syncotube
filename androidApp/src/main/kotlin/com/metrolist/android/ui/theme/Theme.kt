@@ -35,7 +35,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
 import androidx.core.view.WindowCompat
 import com.metrolist.android.extensions.findActivity
-import com.metrolist.android.utils.isAndroidTv
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.settings.ThemePaletteStyle
 import com.metrolist.shared.ui.LocalIsTv
@@ -72,7 +71,6 @@ fun MetrolistTheme(
             }
         }
     }
-    val isTv = remember(context) { context.isAndroidTv() }
     val paletteStyle = Settings.shared.themePaletteStyle
 
     val useSystemDynamicColor = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -139,9 +137,9 @@ fun MetrolistTheme(
         shapes = MetrolistShapes,
         motionScheme = motionScheme,
     ) {
-        CompositionLocalProvider(LocalIsTv provides isTv) {
+        CompositionLocalProvider(LocalIsTv provides false) {
             MetrolistHapticsProvider {
-                FocusOutlineProvider(enabled = isTv, content = content)
+                FocusOutlineProvider(enabled = false, content = content)
             }
         }
     }

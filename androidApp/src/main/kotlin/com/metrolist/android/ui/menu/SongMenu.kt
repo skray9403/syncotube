@@ -16,9 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.metrolist.android.LocalListenTogetherManager
 import com.metrolist.android.LocalPlaylistAdder
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.playback.PlayerConnection
 import com.metrolist.android.utils.startActivitySafely
 import com.metrolist.shared.db.MusicDatabase
@@ -30,15 +28,12 @@ import com.metrolist.shared.generated.resources.refetch_desc
 import com.metrolist.shared.generated.resources.removed_dislike
 import com.metrolist.shared.generated.resources.share_song
 import com.metrolist.shared.generated.resources.song_updated
-import com.metrolist.shared.generated.resources.suggested_to_host
-import com.metrolist.shared.listentogether.ListenTogetherRoomRole
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.editSongMetadata
 import com.metrolist.shared.model.resetSongMetadata
 import com.metrolist.shared.settings.BlockedContent
 import com.metrolist.shared.state.SongLikeState
 import com.metrolist.shared.state.SongMetadataState
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.PlayerMenuAction
 import com.metrolist.shared.ui.components.rememberModalSheetState
 import com.metrolist.shared.ui.icons.MetrolistIcons
@@ -83,8 +78,6 @@ fun SongMenu(
     showEditAction: Boolean = true,
     onHideFromLibrary: (() -> Unit)? = null,
 ) {
-    val suggestedToHostText = stringResource(Res.string.suggested_to_host)
-
     val blockedArtistText = pluralStringResource(Res.plurals.blocked_artists_count, 1, 1)
     val dislikedText = stringResource(Res.string.disliked_song)
     val removedDislikeText = stringResource(Res.string.removed_dislike)
@@ -95,17 +88,10 @@ fun SongMenu(
     val downloadAction = rememberMediaDownloadAction(song, onDismiss, onDownload)
     val speedDialToggle = rememberSpeedDialToggle(song)
     val addToPlaylist = LocalPlaylistAdder.current
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRole by listenTogetherManager?.role?.collectAsState()
-        ?: remember { mutableStateOf(ListenTogetherRoomRole.NONE) }
-    val isInListenTogetherRoom by listenTogetherManager?.isInRoom?.collectAsState()
-        ?: remember { mutableStateOf(false) }
-    val isGuest = isInListenTogetherRoom && listenTogetherRole == ListenTogetherRoomRole.GUEST
     var showEditDialog by remember { mutableStateOf(false) }
     var showDetails by remember(song.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val menuSheetState = rememberModalSheetState(confirmValueChange = { it != SheetValue.Hidden || !downloadAction.isConfirming() })
-    val isTv = LocalIsTv.current
     val isMouseInput = LocalContextMenuAnchor.current.isMouseInput
     val showSongDetails: () -> Unit = {
         if (onShowInfo != null) {
@@ -113,7 +99,7 @@ fun SongMenu(
             onDismiss()
         } else {
             scope.launch {
-                if (isTv || isMouseInput || menuSheetState.hide()) showDetails = true
+                if (isMouseInput || menuSheetState.hide()) showDetails = true
             }
         }
     }
@@ -125,7 +111,7 @@ fun SongMenu(
             onDismiss = { if (!downloadAction.isConfirming()) onDismiss() },
             isLiked = isLiked,
             isDisliked = SongLikeState.isDisliked(song.id),
-            isGuest = isGuest,
+            isGuest = false,
             isPinned = speedDialToggle.isPinned,
             downloadState =
                 if (downloadAction.isDownloaded) {
@@ -171,10 +157,6 @@ fun SongMenu(
                     clipboard?.setPrimaryClip(ClipData.newPlainText("Metrolist", ShareUrls.song(song.id)))
                     Unit
                 },
-            onSuggestToHost = {
-                AndroidListenTogetherManager.suggestTrack(song)
-                Toast.makeText(context, suggestedToHostText, Toast.LENGTH_SHORT).show()
-            },
             onPlayNext = onPlayNext,
             onAddToQueue = onAddToQueue,
             onTogglePin = speedDialToggle.toggle,

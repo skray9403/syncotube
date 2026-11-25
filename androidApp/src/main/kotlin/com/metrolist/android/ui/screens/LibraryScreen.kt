@@ -27,9 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuGroup
@@ -61,24 +59,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metrolist.android.LocalMiniPlayerBottomInset
 import com.metrolist.android.extensions.isInternetConnected
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.playback.LocalPlayerConnection
 import com.metrolist.android.ui.component.AdaptiveModalBottomSheet
 import com.metrolist.android.ui.component.SwipeGestureHandler
@@ -109,7 +97,6 @@ import com.metrolist.shared.generated.resources.delete
 import com.metrolist.shared.generated.resources.delete_playlist_question
 import com.metrolist.shared.generated.resources.error_occurred
 import com.metrolist.shared.generated.resources.hide_from_library
-import com.metrolist.shared.generated.resources.import_playlist
 import com.metrolist.shared.generated.resources.local_playlist
 import com.metrolist.shared.generated.resources.more_options
 import com.metrolist.shared.generated.resources.new_playlist
@@ -137,7 +124,6 @@ import com.metrolist.shared.settings.initialLibraryFilter
 import com.metrolist.shared.state.GlobalYouTubeRepository
 import com.metrolist.shared.state.SongLikeState
 import com.metrolist.shared.state.UploadNotificationState
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.AlertDialog
 import com.metrolist.shared.ui.components.ChipShelf
 import com.metrolist.shared.ui.components.FabMenuPopup
@@ -159,7 +145,6 @@ import com.metrolist.shared.ui.screens.libraryAutoPlaylists
 import com.metrolist.shared.ui.screens.libraryContentText
 import com.metrolist.shared.ui.screens.rememberLibrarySearchScrollState
 import com.metrolist.shared.ui.theme.gridCellShape
-import com.metrolist.shared.ui.tv.tvFocusHighlight
 import com.metrolist.shared.utils.ShareUrls
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -182,7 +167,7 @@ fun LibraryScreen(
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToPodcast: (String) -> Unit = {},
     onNavigateToAutoPlaylist: ((String) -> Unit)? = null,
-    onNavigateToPlaylistImport: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onNavigateToPlaylistImport: () -> Unit = {},
     floatingActionsBottomInset: State<Dp>,
     scrollToTopEvents: Flow<Long> = emptyFlow(),
     viewModel: LibraryViewModel = koinViewModel(),
@@ -195,7 +180,6 @@ fun LibraryScreen(
     val errorOccurredText = stringResource(Res.string.error_occurred)
 
     val playerConnection = LocalPlayerConnection.current
-    val isGuestPlaybackLocked by AndroidListenTogetherManager.isGuestPlaybackLockedFlow.collectAsStateWithLifecycle()
     val currentSong by playerConnection?.currentSong?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) }
     val isPlaying by playerConnection?.isPlaying?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(false) }
     val rootActive = LocalRootContentActive.current
@@ -559,8 +543,7 @@ fun LibraryScreen(
                             enabled =
                                 playerConnection != null &&
                                     Settings.shared.swipeToSong &&
-                                    ((item is SongItem && !item.isUnavailable && !isGridView) || searchQuery.isNotBlank()) &&
-                                    !isGuestPlaybackLocked,
+                                    ((item is SongItem && !item.isUnavailable && !isGridView) || searchQuery.isNotBlank()),
                             shape = if (isGridView) gridCellShape() else RoundedCornerShape(ThumbnailCornerRadius),
                             content = content,
                         )
@@ -730,7 +713,6 @@ fun LibraryScreen(
                             leadingContent = { Icon(MetrolistIcons.Filled.VisibilityOff, contentDescription = null) },
                             modifier =
                                 Modifier
-                                    .tvFocusHighlight(RoundedCornerShape(12.dp))
                                     .clickable {
                                         hideFromLibrary()
                                         menuItem = null
@@ -769,35 +751,31 @@ fun LibraryScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (LocalIsTv.current) {
-            Box(Modifier.fillMaxSize()) { content() }
-        } else {
-            var userRefreshing by remember { mutableStateOf(false) }
-            val isLoadingNow by rememberUpdatedState(uiState.isRefreshing)
-            LaunchedEffect(userRefreshing) {
-                if (!userRefreshing) return@LaunchedEffect
-                withTimeoutOrNull(1_500L) { snapshotFlow { isLoadingNow }.first { it } }
-                snapshotFlow { isLoadingNow }.first { !it }
-                userRefreshing = false
-            }
-            val refreshState = rememberPullToRefreshState()
-            PullToRefreshBox(
-                isRefreshing = userRefreshing,
-                onRefresh = {
-                    userRefreshing = true
-                    if (networkAvailable && !isLoadingNow) viewModel.refresh()
-                },
-                state = refreshState,
-                indicator = {
-                    RefreshIndicator(
-                        state = refreshState,
-                        isRefreshing = userRefreshing,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = topPadding),
-                    )
-                },
-                modifier = Modifier.fillMaxSize(),
-            ) { content() }
+        var userRefreshing by remember { mutableStateOf(false) }
+        val isLoadingNow by rememberUpdatedState(uiState.isRefreshing)
+        LaunchedEffect(userRefreshing) {
+            if (!userRefreshing) return@LaunchedEffect
+            withTimeoutOrNull(1_500L) { snapshotFlow { isLoadingNow }.first { it } }
+            snapshotFlow { isLoadingNow }.first { !it }
+            userRefreshing = false
         }
+        val refreshState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = userRefreshing,
+            onRefresh = {
+                userRefreshing = true
+                if (networkAvailable && !isLoadingNow) viewModel.refresh()
+            },
+            state = refreshState,
+            indicator = {
+                RefreshIndicator(
+                    state = refreshState,
+                    isRefreshing = userRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = topPadding),
+                )
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) { content() }
 
         ScrollingAddButton(
             label = stringResource(Res.string.new_playlist),
@@ -814,23 +792,14 @@ fun LibraryScreen(
             ) {
                 DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
                     DropdownMenuItem(
-                        modifier = Modifier.tvFocusHighlight(groupedMenuItemShapes(0, 2).shape).navigationPopupSource(),
+                        modifier = Modifier.navigationPopupSource(),
                         text = { Text(stringResource(Res.string.create_playlist)) },
-                        shape = groupedMenuItemShapes(0, 2).shape,
+                        shape = groupedMenuItemShapes(0, 1).shape,
                         onClick = {
                             showNewPlaylistMenu = false
                             remoteCreationAvailable = GlobalYouTubeRepository.instance.canManagePlaylists()
                             createLocally = !remoteCreationAvailable
                             showCreateDialog = true
-                        },
-                    )
-                    DropdownMenuItem(
-                        modifier = Modifier.tvFocusHighlight(groupedMenuItemShapes(1, 2).shape),
-                        text = { Text(stringResource(Res.string.import_playlist)) },
-                        shape = groupedMenuItemShapes(1, 2).shape,
-                        onClick = {
-                            showNewPlaylistMenu = false
-                            onNavigateToPlaylistImport()
                         },
                     )
                 }
@@ -947,54 +916,16 @@ private fun PlaylistNameDialog(
     destination: @Composable () -> Unit = {},
     onConfirm: () -> Unit,
 ) {
-    val isTv = LocalIsTv.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            val focusManager = LocalFocusManager.current
-            val keyboardController = LocalSoftwareKeyboardController.current
-            var tvKeyboardRequested by remember { mutableStateOf(false) }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value,
                     onValueChange,
                     label = { Text(stringResource(Res.string.playlist_name)) },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(showKeyboardOnFocus = !isTv || tvKeyboardRequested),
-                    modifier =
-                        Modifier.onFocusChanged { if (!it.isFocused) tvKeyboardRequested = false }.onPreviewKeyEvent { event ->
-                            if (!isTv) return@onPreviewKeyEvent false
-                            when (event.key) {
-                                Key.DirectionCenter, Key.Enter -> {
-                                    if (event.type == KeyEventType.KeyUp) {
-                                        tvKeyboardRequested = true
-                                        keyboardController?.show()
-                                    }
-                                    true
-                                }
-
-                                Key.DirectionDown, Key.DirectionRight, Key.DirectionUp, Key.DirectionLeft -> {
-                                    if (event.type == KeyEventType.KeyDown) {
-                                        keyboardController?.hide()
-                                        focusManager.moveFocus(
-                                            if (event.key == Key.DirectionDown ||
-                                                event.key == Key.DirectionRight
-                                            ) {
-                                                FocusDirection.Next
-                                            } else {
-                                                FocusDirection.Previous
-                                            },
-                                        )
-                                    }
-                                    true
-                                }
-
-                                else -> {
-                                    false
-                                }
-                            }
-                        },
                 )
                 destination()
             }
@@ -1003,12 +934,11 @@ private fun PlaylistNameDialog(
             TextButton(
                 enabled = value.isNotBlank(),
                 onClick = onConfirm,
-                modifier = Modifier.tvFocusHighlight(CircleShape),
                 shapes = ButtonDefaults.shapes(),
             ) { Text(confirmLabel) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.tvFocusHighlight(CircleShape), shapes = ButtonDefaults.shapes()) {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(Res.string.cancel))
             }
         },

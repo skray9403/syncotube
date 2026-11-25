@@ -2,19 +2,14 @@
 
 package com.metrolist.android.ui
 
-import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.nfc.NfcAdapter
 import android.os.Build
-import android.provider.MediaStore
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,7 +44,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.systemGestureExclusion
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -99,17 +93,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -137,7 +127,6 @@ import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -158,7 +147,6 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.metrolist.android.App
 import com.metrolist.android.BuildConfig
-import com.metrolist.android.LocalListenTogetherManager
 import com.metrolist.android.LocalMiniPlayerBottomInset
 import com.metrolist.android.LocalPlayerExpanded
 import com.metrolist.android.LocalPlayerExpandedOrExpanding
@@ -167,17 +155,14 @@ import com.metrolist.android.LocalStartupPresentation
 import com.metrolist.android.MainActivity
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
 import com.metrolist.android.extensions.findActivity
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.locale.AppLocale
 import com.metrolist.android.playback.AndroidPlaybackController
-import com.metrolist.android.playback.ListenTogetherPlaybackRequest
 import com.metrolist.android.playback.LocalPlayerConnection
 import com.metrolist.android.playback.PlaybackSnackbarEvents
 import com.metrolist.android.playback.PlayerConnection
 import com.metrolist.android.playback.SongDownloadManager
 import com.metrolist.android.playback.isRunnable
 import com.metrolist.android.playback.resolveIncomingPlaybackSong
-import com.metrolist.android.playback.voiceSearchRequest
 import com.metrolist.android.ui.component.BottomSheetMenu
 import com.metrolist.android.ui.component.FloatingTopAppBar
 import com.metrolist.android.ui.component.LocalMenuState
@@ -194,8 +179,6 @@ import com.metrolist.android.ui.components.calculateNavigationContentInset
 import com.metrolist.android.ui.components.shouldUseDesktopCaption
 import com.metrolist.android.ui.components.shouldUseDesktopMiniPlayer
 import com.metrolist.android.ui.player.AndroidPlayerPlatform
-import com.metrolist.android.ui.player.MusicVideoSurface
-import com.metrolist.android.ui.player.PictureInPictureHelper
 import com.metrolist.android.ui.screens.AboutArtistScreen
 import com.metrolist.android.ui.screens.AlbumScreen
 import com.metrolist.android.ui.screens.ArtistScreenHost
@@ -210,22 +193,13 @@ import com.metrolist.android.ui.screens.LibraryScreen
 import com.metrolist.android.ui.screens.LoginScreen
 import com.metrolist.android.ui.screens.PlaylistScreen
 import com.metrolist.android.ui.screens.PodcastScreen
-import com.metrolist.android.ui.screens.RecognitionHistoryScreen
-import com.metrolist.android.ui.screens.RecognitionScreen
 import com.metrolist.android.ui.screens.SearchScreen
 import com.metrolist.android.ui.screens.SettingsScreen
 import com.metrolist.android.ui.screens.settings.AndroidAboutScreen
-import com.metrolist.android.ui.screens.settings.AndroidAutoScreen
 import com.metrolist.android.ui.screens.settings.AndroidWrappedScreen
 import com.metrolist.android.ui.screens.settings.BackupRestoreScreen
 import com.metrolist.android.ui.screens.settings.DevtoolsSettingsScreen
-import com.metrolist.android.ui.screens.settings.ListenTogetherBlockedUsersScreen
-import com.metrolist.android.ui.screens.settings.ListenTogetherLogsScreen
-import com.metrolist.android.ui.screens.settings.ListenTogetherScreen
-import com.metrolist.android.ui.screens.settings.ListenTogetherServerScreen
-import com.metrolist.android.ui.screens.settings.ListenTogetherSettingsScreen
 import com.metrolist.android.ui.screens.settings.PlaybackBenchmarkSettingsScreen
-import com.metrolist.android.ui.screens.settings.PlaylistImportScreen
 import com.metrolist.android.ui.screens.settings.ReleaseNotesSheet
 import com.metrolist.android.ui.screens.settings.StatsDetailScreen
 import com.metrolist.android.ui.screens.settings.StatsScreen
@@ -238,12 +212,9 @@ import com.metrolist.android.ui.utils.resetHeightOffset
 import com.metrolist.android.update.AppUpdateManager
 import com.metrolist.android.update.AppUpdateState
 import com.metrolist.android.update.GitHubRelease
-import com.metrolist.android.utils.isAndroidAutomotive
-import com.metrolist.android.utils.isAndroidTv
 import com.metrolist.android.utils.startActivitySafely
 import com.metrolist.android.viewmodels.LibraryViewModel
 import com.metrolist.android.viewmodels.PlaybackViewModel
-import com.metrolist.android.widget.PlaylistWidgetReceiver
 import com.metrolist.innertubex.utils.YouTubeUrlParser
 import com.metrolist.shared.auth.AuthManager
 import com.metrolist.shared.auth.YouTubeSessionState
@@ -260,7 +231,6 @@ import com.metrolist.shared.generated.resources.action_login
 import com.metrolist.shared.generated.resources.action_not_now
 import com.metrolist.shared.generated.resources.added_songs_to_playlist
 import com.metrolist.shared.generated.resources.back
-import com.metrolist.shared.generated.resources.cancel
 import com.metrolist.shared.generated.resources.continue_playback_message
 import com.metrolist.shared.generated.resources.continue_playback_title
 import com.metrolist.shared.generated.resources.devtools_title
@@ -268,13 +238,6 @@ import com.metrolist.shared.generated.resources.downloads
 import com.metrolist.shared.generated.resources.error
 import com.metrolist.shared.generated.resources.filter_library
 import com.metrolist.shared.generated.resources.home
-import com.metrolist.shared.generated.resources.lastfm_session_expired_description
-import com.metrolist.shared.generated.resources.lastfm_session_expired_title
-import com.metrolist.shared.generated.resources.listen_together
-import com.metrolist.shared.generated.resources.listen_together_guest_choice_message
-import com.metrolist.shared.generated.resources.listen_together_guest_choice_title
-import com.metrolist.shared.generated.resources.listen_together_guest_queue
-import com.metrolist.shared.generated.resources.listen_together_guest_solo
 import com.metrolist.shared.generated.resources.menu_history
 import com.metrolist.shared.generated.resources.menu_stop
 import com.metrolist.shared.generated.resources.mysterious_fourth_tab
@@ -292,15 +255,11 @@ import com.metrolist.shared.generated.resources.updates_pending_parenthetical
 import com.metrolist.shared.generated.resources.youtube_music
 import com.metrolist.shared.generated.resources.youtube_session_expired_message
 import com.metrolist.shared.generated.resources.youtube_session_expired_title
-import com.metrolist.shared.listentogether.parseListenTogetherInvitation
 import com.metrolist.shared.model.ArtistTiny
 import com.metrolist.shared.model.BuiltinPlaylist
 import com.metrolist.shared.model.SearchFilter
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.playback.LocalPlayerSession
-import com.metrolist.shared.playlistimport.PlaylistImportProgressCard
-import com.metrolist.shared.playlistimport.PlaylistImportStatusManager
-import com.metrolist.shared.scrobble.ScrobbleSessions
 import com.metrolist.shared.settings.MiniPlayerType
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.settings.defaultOpenTabRoot
@@ -328,7 +287,6 @@ import com.metrolist.shared.ui.design.expressive.components.ExpressiveMiniPlayer
 import com.metrolist.shared.ui.haptics.HapticEvent
 import com.metrolist.shared.ui.haptics.rememberMetrolistHaptics
 import com.metrolist.shared.ui.icons.MetrolistIcons
-import com.metrolist.shared.ui.listentogether.ListenTogetherGlobalEvents
 import com.metrolist.shared.ui.menu.ContentUndoHintsSnackbar
 import com.metrolist.shared.ui.menu.HiddenHomeItemsSnackbar
 import com.metrolist.shared.ui.menu.LocalContextMenuAnchor
@@ -362,16 +320,12 @@ import com.metrolist.shared.ui.navigation.withPointerInput
 import com.metrolist.shared.ui.playback.LocalPlaybackController
 import com.metrolist.shared.ui.player.LocalPlayerPlatform
 import com.metrolist.shared.ui.player.PlayerScreen
-import com.metrolist.shared.ui.player.shouldShowMusicVideoSurface
 import com.metrolist.shared.ui.screens.SupportPrompt
 import com.metrolist.shared.ui.screens.pageKey
 import com.metrolist.shared.ui.screens.toHomeSection
-import com.metrolist.shared.ui.settings.SettingsPageId
 import com.metrolist.shared.ui.theme.resolveThemeSeedColor
-import com.metrolist.shared.ui.tv.tvFocusHighlight
 import com.metrolist.shared.ui.utils.LocalMouseScrollFactors
 import com.metrolist.shared.utils.BlockScreenshots
-import com.metrolist.shared.utils.extractListenTogetherRoomCode
 import com.metrolist.shared.utils.parseYouTubePodcastId
 import com.metrolist.shared.utils.parseYouTubeStartPositionMs
 import com.metrolist.shared.utils.parseYouTubeUrl
@@ -397,7 +351,6 @@ import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import coil3.compose.AsyncImage as CoilAsyncImage
-import com.metrolist.android.ui.screens.settings.IntegrationsScreen as SettingsIntegrationsScreen
 
 private const val NAVIGATION_ROUTE_METADATA_KEY = "metrolist:route"
 
@@ -550,31 +503,7 @@ fun MetrolistApp(
                 },
             )
         }
-        PopupVisibility(visible = ScrobbleSessions.showLastFmExpiredNotice && !YouTubeSessionState.showExpiredSessionNotice) {
-            AlertDialog(
-                onDismissRequest = ScrobbleSessions::dismissLastFmExpiredNotice,
-                title = { Text(stringResource(Res.string.lastfm_session_expired_title)) },
-                text = { Text(stringResource(Res.string.lastfm_session_expired_description)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            ScrobbleSessions.dismissLastFmExpiredNotice()
-                            navigator.navigate(Screen.LastFm)
-                        },
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Text(stringResource(Res.string.action_login))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = ScrobbleSessions::dismissLastFmExpiredNotice, shapes = ButtonDefaults.shapes()) {
-                        Text(stringResource(Res.string.action_not_now))
-                    }
-                },
-            )
-        }
         var pendingSearchQuery by remember { mutableStateOf<String?>(null) }
-        var pendingRoomCode by rememberSaveable { mutableStateOf<String?>(null) }
         var continuePlaybackPromptHandled by rememberSaveable { mutableStateOf(false) }
         var showContinuePlaybackPrompt by rememberSaveable { mutableStateOf(false) }
 
@@ -711,26 +640,9 @@ fun MetrolistApp(
 
         val playerConnection = playbackViewModel.playerConnection
         val playbackController = remember(playerConnection) { AndroidPlaybackController(playerConnection, coroutineScope) }
-        var listenTogetherManager by remember(playerConnection) {
-            mutableStateOf(AndroidListenTogetherManager.currentManager)
-        }
-        LaunchedEffect(playerConnection, currentRoute) {
-            if (listenTogetherManager != null || Settings.shared.listenTogetherDesktopSession.isNotBlank() ||
-                currentRoute in
-                setOf(
-                    Screen.ListenTogether,
-                    Screen.ListenTogetherSettings,
-                    Screen.ListenTogetherServer,
-                    Screen.ListenTogetherBlockedUsers,
-                    Screen.ListenTogetherLogs,
-                )
-            ) {
-                listenTogetherManager = AndroidListenTogetherManager.initialize(context, playerConnection)
-            }
-        }
         val playerPlatform =
-            remember(context, playerConnection, listenTogetherManager) {
-                AndroidPlayerPlatform(context.findActivity(), playerConnection, listenTogetherManager)
+            remember(context, playerConnection) {
+                AndroidPlayerPlatform(context.findActivity(), playerConnection)
             }
         val playerViewModel: PlayerViewModel = koinInject()
         val downloadManager: SongDownloadManager = koinInject()
@@ -746,9 +658,6 @@ fun MetrolistApp(
         UnavailableSongSnackbar(snackbarHostState)
         YouTubeSyncSnackbar(snackbarHostState)
         LyricsTranslationSnackbar(snackbarHostState, playerViewModel.lyricsTranslationFailures)
-        listenTogetherManager?.let { manager ->
-            ListenTogetherGlobalEvents(manager) { snackbarHostState.showSnackbar(it) }
-        }
         val addToPlaylist =
             rememberSongsPlaylistAdder(database) { completion ->
                 snackbarHostState.showSnackbar(
@@ -786,14 +695,7 @@ fun MetrolistApp(
         }
 
         var searchResultsVisible by rememberSaveable { mutableStateOf(false) }
-        val isAndroidTv = remember(context) { context.isAndroidTv() }
-        val isAutomotive = remember(context) { context.isAndroidAutomotive() }
-        val adaptiveFormFactor =
-            when {
-                isAutomotive -> AdaptiveFormFactor.AUTOMOTIVE
-                isAndroidTv -> AdaptiveFormFactor.TELEVISION
-                else -> AdaptiveFormFactor.TOUCH
-            }
+        val adaptiveFormFactor = AdaptiveFormFactor.TOUCH
         val hasMouseDevice = rememberHasMouseDevice()
         val isDeskMode =
             LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK ==
@@ -813,7 +715,7 @@ fun MetrolistApp(
         val shouldShowNavigationBar =
             (useDesktopUi || currentRoute in topLevelRoutes) &&
                 !(currentRoute == Screen.Search && searchResultsVisible)
-        val usesDirectionalNavigation = isAndroidTv || isAutomotive
+        val usesDirectionalNavigation = false
         val navigationSuiteType =
             when {
                 adaptiveFormFactor == AdaptiveFormFactor.TOUCH && isLandscape &&
@@ -967,14 +869,8 @@ fun MetrolistApp(
         // Stretch overscroll re-renders the whole list into an offscreen layer every frame at the edges.
         val overscrollFactory = LocalOverscrollFactory.current
 
-        var tvAppHasFocus by remember { mutableStateOf(false) }
         NavigationContentProvider(
             miniPlayerContentInset,
-            LocalTvAppHasFocus provides { tvAppHasFocus },
-            LocalTvNavigationFocusFallback provides {
-                shouldShowNavigationBar && useNavigationRail &&
-                    runCatching { selectedRailFocusRequester.requestFocus() }.getOrDefault(false)
-            },
             LocalOverscrollFactory provides overscrollFactory,
             LocalNavigator provides navigator,
             LocalNavigationContainerState provides navigator.state.containers,
@@ -983,8 +879,7 @@ fun MetrolistApp(
             LocalPlayerConnection provides playerConnection,
             LocalPlayerSession provides playerConnection,
             LocalPlayerPlatform provides playerPlatform,
-            LocalListenTogetherManager provides listenTogetherManager,
-            LocalIsTv provides isAndroidTv,
+            LocalIsTv provides false,
             LocalMenuState provides menuState,
             LocalUseDesktopUi provides useDesktopUi,
             LocalContextMenuAnchor provides menuAnchor,
@@ -1006,10 +901,6 @@ fun MetrolistApp(
                                 } else {
                                     buttonModifier
                                 }
-                            ).tvFocusHighlight(
-                                CircleShape,
-                                scale = 1.08f,
-                                bringIntoView = false,
                             ).navigationPopupSource(),
                         shapes = IconButtonDefaults.shapes(),
                     ) {
@@ -1056,7 +947,6 @@ fun MetrolistApp(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .then(if (isAndroidTv) Modifier.onFocusChanged { tvAppHasFocus = it.hasFocus }.focusGroup() else Modifier)
                     .contextMenuAnchor(menuAnchor)
                     .drawBehind {
                         val left = horizontalSystemBars.getLeft(this, layoutDirection).toFloat()
@@ -1101,7 +991,6 @@ fun MetrolistApp(
                         }
                     }
                 }
-                ListenTogetherPlaybackRequestHandler(playerConnection)
                 BoxWithConstraints(
                     Modifier
                         .weight(1f)
@@ -1126,7 +1015,7 @@ fun MetrolistApp(
                     ContentUndoHintsSnackbar(snackbarHostState) { page ->
                         coroutineScope.launch {
                             if (hasMedia) playerBottomSheetState.collapseSoft()
-                            navigator.navigate(page.settingsPage?.let { Screen.SettingsPage(it) } ?: Screen.ListenTogetherBlockedUsers)
+                            page.settingsPage?.let { navigator.navigate(Screen.SettingsPage(it)) }
                         }
                     }
                     val calculateFloatingActionsBottomInset by rememberUpdatedState {
@@ -1165,19 +1054,12 @@ fun MetrolistApp(
                         libraryViewModel.setActive(libraryActive)
                         onStopOrDispose { libraryViewModel.setActive(false) }
                     }
-                    val listenTogetherVisible = currentRoute == Screen.ListenTogether && !isPlayerExpandedOrExpanding && !isInPipMode
-                    LifecycleResumeEffect(listenTogetherVisible) {
-                        AndroidListenTogetherManager.setScreenVisible(listenTogetherVisible)
-                        onPauseOrDispose { AndroidListenTogetherManager.setScreenVisible(false) }
-                    }
 
                     val isPlayerExpanded = playerBottomSheetState.isExpanded
                     var lyricsVisible by remember { mutableStateOf(false) }
-                    val activeImport by PlaylistImportStatusManager.activeImport.collectAsState()
                     val hostView = LocalView.current
                     val keepScreenOn =
-                        (isPlayerExpanded && Settings.shared.keepScreenOnMode.keepsAwake(isPlaying, lyricsVisible)) ||
-                            (currentRoute in setOf(Screen.PlaylistImport, Screen.BackupRestore) && activeImport?.isRunning == true)
+                        isPlayerExpanded && Settings.shared.keepScreenOnMode.keepsAwake(isPlaying, lyricsVisible)
                     DisposableEffect(hostView, keepScreenOn) {
                         hostView.keepScreenOn = keepScreenOn
                         onDispose { hostView.keepScreenOn = false }
@@ -1208,20 +1090,7 @@ fun MetrolistApp(
 
                     LaunchedEffect(incomingIntent) {
                         val intent = incomingIntent ?: return@LaunchedEffect
-                        if (intent.action == MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) {
-                            playerConnection.playFromSearch(
-                                voiceSearchRequest(intent.getStringExtra(SearchManager.QUERY).orEmpty(), intent.extras),
-                            )
-                            onIncomingIntentConsumed(intent)
-                            return@LaunchedEffect
-                        }
                         val destination = intent.toIncomingDestination()
-                        if (!Settings.shared.listenTogetherEnabled &&
-                            (destination is IncomingDestination.ListenTogether || destination == IncomingDestination.ListenTogetherRoom)
-                        ) {
-                            onIncomingIntentConsumed(intent)
-                            return@LaunchedEffect
-                        }
                         if (destination != null && destination !is IncomingDestination.Search) {
                             pendingSearchQuery = null
                         }
@@ -1246,11 +1115,6 @@ fun MetrolistApp(
                                 navigator.navigate(Screen.Downloads)
                             }
 
-                            IncomingDestination.ListenTogetherRoom -> {
-                                pendingRoomCode = null
-                                navigator.navigate(Screen.ListenTogether)
-                            }
-
                             IncomingDestination.Updates -> {
                                 navigator.navigate(Screen.UpdateDetails)
                             }
@@ -1265,14 +1129,6 @@ fun MetrolistApp(
 
                             IncomingDestination.BackupRestore -> {
                                 navigator.navigate(Screen.BackupRestore)
-                            }
-
-                            IncomingDestination.Recognition -> {
-                                navigator.navigate(Screen.Recognition)
-                            }
-
-                            IncomingDestination.LastFm -> {
-                                navigator.navigate(Screen.LastFm)
                             }
 
                             IncomingDestination.Player -> {
@@ -1326,20 +1182,6 @@ fun MetrolistApp(
                                 navigator.navigate(Screen.Browse(destination.id, destination.params, destination.title))
                             }
 
-                            is IncomingDestination.ListenTogether -> {
-                                pendingRoomCode = destination.roomCode
-                                pendingOpenPlayer = false
-                                if (hasMedia) playerBottomSheetState.collapseSoft()
-                                navigator.navigate(Screen.ListenTogether)
-                            }
-
-                            is IncomingDestination.PlaylistImport -> {
-                                navigator.navigate(Screen.PlaylistImport)
-                                destination.resultMessage?.let { message ->
-                                    coroutineScope.launch { snackbarHostState.showSnackbar(message) }
-                                }
-                            }
-
                             is IncomingDestination.PlayVideo -> {
                                 val song =
                                     incomingPlaybackSong?.await() ?: resolveIncomingPlaybackSong(
@@ -1387,31 +1229,6 @@ fun MetrolistApp(
                         }
                     }
 
-                    val isPlayerConnected by playerConnection.isConnected.collectAsState()
-                    val videoPlayer = if (isPlayerConnected) playerConnection.videoPlayer else null
-                    val playbackResource by playerConnection.currentPlaybackResource.collectAsState()
-                    val isVideoModeActive by playerConnection.isVideoModeActive.collectAsState()
-                    val isVideoViewerVisible by playerConnection.isVideoViewerVisible.collectAsState()
-                    val activity = remember(context) { context.findActivity() }
-                    val videoSize = videoPlayer?.videoSize
-                    val hasVideo =
-                        shouldShowMusicVideoSurface(
-                            isVideoModeActive = isVideoModeActive,
-                            isVideoViewerVisible = isVideoViewerVisible,
-                            hasVideo = playbackResource?.hasVideo == true,
-                        )
-
-                    LaunchedEffect(isInPipMode, isPlaying, videoSize, hasVideo) {
-                        if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            PictureInPictureHelper.updatePictureInPictureParams(
-                                activity = activity,
-                                isPlaying = isPlaying,
-                                videoSize = videoSize,
-                                hasVideo = hasVideo,
-                            )
-                        }
-                    }
-
                     Box(Modifier.fillMaxSize()) {
                         val playerHandlesBack by remember(playerBottomSheetState) {
                             derivedStateOf { playerBottomSheetState.progress > 0.2f && !playerBottomSheetState.isDismissed }
@@ -1444,7 +1261,6 @@ fun MetrolistApp(
                                 navigationSuiteType = navigationSuiteType,
                                 navigationVisible = shouldShowNavigationBar,
                                 containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface,
-                                onSearchLongClick = { navigator.navigate(Screen.Recognition) },
                                 floatingNavigation = useFloatingNavBar,
                                 onFloatingNavigationOccupiedHeightChanged = {
                                     floatingNavBarHeight = it
@@ -1488,7 +1304,7 @@ fun MetrolistApp(
                                         ),
                             ) {
                                 Column(
-                                    // Measure the full content slot before the import card and top inset reduce the scaffold.
+                                    // Measure the full content slot before the top inset reduces the scaffold.
                                     Modifier
                                         .fillMaxSize()
                                         .onSizeChanged { size ->
@@ -1496,15 +1312,8 @@ fun MetrolistApp(
                                                 navigationBarContentInset =
                                                     calculateNavigationContentInset(maxHeight, with(density) { size.height.toDp() })
                                             }
-                                        }.then(
-                                            if (activeImport != null) {
-                                                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                                            } else {
-                                                Modifier
-                                            },
-                                        ),
+                                        },
                                 ) {
-                                    PlaylistImportProgressCard()
                                     Scaffold(
                                         containerColor = Color.Transparent,
                                         contentWindowInsets = WindowInsets(0),
@@ -1554,12 +1363,6 @@ fun MetrolistApp(
                                                         TopBarIconButton(
                                                             floating = useFloatingTopBar,
                                                             onClick = { navigator.navigate(Screen.History) },
-                                                            modifier =
-                                                                Modifier.tvFocusHighlight(
-                                                                    CircleShape,
-                                                                    scale = 1.08f,
-                                                                    bringIntoView = false,
-                                                                ),
                                                         ) {
                                                             Icon(
                                                                 MetrolistIcons.Outlined.MusicHistory,
@@ -1585,34 +1388,10 @@ fun MetrolistApp(
                                                         TopBarIconButton(
                                                             floating = useFloatingTopBar,
                                                             onClick = { navigator.navigate(Screen.Devtools) },
-                                                            modifier =
-                                                                Modifier.tvFocusHighlight(
-                                                                    CircleShape,
-                                                                    scale = 1.08f,
-                                                                    bringIntoView = false,
-                                                                ),
                                                         ) {
                                                             Icon(
                                                                 MetrolistIcons.Outlined.Settings,
                                                                 contentDescription = stringResource(Res.string.devtools_title),
-                                                                modifier = Modifier.size(24.dp),
-                                                            )
-                                                        }
-                                                    }
-                                                    if (Settings.shared.listenTogetherEnabled && Screen.ListenTogether !in railScreens) {
-                                                        TopBarIconButton(
-                                                            floating = useFloatingTopBar,
-                                                            onClick = { navigator.navigate(Screen.ListenTogether) },
-                                                            modifier =
-                                                                Modifier.tvFocusHighlight(
-                                                                    CircleShape,
-                                                                    scale = 1.08f,
-                                                                    bringIntoView = false,
-                                                                ),
-                                                        ) {
-                                                            Icon(
-                                                                MetrolistIcons.Outlined.Group,
-                                                                contentDescription = stringResource(Res.string.listen_together),
                                                                 modifier = Modifier.size(24.dp),
                                                             )
                                                         }
@@ -1677,15 +1456,9 @@ fun MetrolistApp(
                                                     modifier =
                                                         Modifier
                                                             .fillMaxSize()
-                                                            .then(
-                                                                if (!isAndroidTv) {
-                                                                    Modifier
-                                                                        .focusProperties { canFocus = !isPlayerExpanded }
-                                                                        .focusGroup()
-                                                                } else {
-                                                                    Modifier
-                                                                },
-                                                            ).focusRequester(contentFocusRequester)
+                                                            .focusProperties { canFocus = !isPlayerExpanded }
+                                                            .focusGroup()
+                                                            .focusRequester(contentFocusRequester)
                                                             .focusRestorer()
                                                             .then(
                                                                 if (useNavigationRail && shouldShowNavigationBar) {
@@ -1719,7 +1492,6 @@ fun MetrolistApp(
                                                                 coroutineScope,
                                                                 { pendingSearchQuery },
                                                                 { pendingSearchQuery = null },
-                                                                { pendingRoomCode },
                                                                 floatingActionsBottomInset,
                                                                 homeScrollToTopEvents,
                                                                 libraryScrollToTopEvents,
@@ -1859,15 +1631,7 @@ fun MetrolistApp(
                                         clipRect(bottom = (size.height - bottomInset).coerceAtLeast(0f)) {
                                             this@drawWithContent.drawContent()
                                         }
-                                    }.then(
-                                        if (!isAndroidTv ||
-                                            (isLandscape && (Settings.shared.immersivePlayer || playerBottomSheetState.progress > 0f))
-                                        ) {
-                                            Modifier
-                                        } else {
-                                            Modifier.windowInsetsPadding(horizontalSystemBars.only(WindowInsetsSides.Horizontal))
-                                        },
-                                    ).zIndex(
+                                    }.zIndex(
                                         if (playerBottomSheetState.isDismissed || !shouldShowMiniPlayer || immersiveContent.value) {
                                             -1f
                                         } else {
@@ -1931,13 +1695,6 @@ fun MetrolistApp(
                                                                 true
                                                             },
                                                         )
-                                                }.onPreviewKeyEvent { event ->
-                                                    if (isAndroidTv && event.key == Key.DirectionUp) {
-                                                        event.type == KeyEventType.KeyUp ||
-                                                            contentFocusRequester.requestFocus(FocusDirection.Up)
-                                                    } else {
-                                                        false
-                                                    }
                                                 }.layout { measurable, constraints ->
                                                     val start = miniPlayerRailPadding().roundToPx()
                                                     val child = measurable.measure(constraints.offset(horizontal = -start))
@@ -1972,10 +1729,7 @@ fun MetrolistApp(
                                     playerBottomSheetState.collapseSoft()
                                     navigator.navigate(Screen.Artist(artistId))
                                 },
-                                onNavigateToListenTogether = {
-                                    playerBottomSheetState.collapseSoft()
-                                    navigator.navigate(Screen.ListenTogether)
-                                },
+                                onNavigateToListenTogether = {},
                                 onNavigateToIntegrations = {
                                     playerBottomSheetState.collapseSoft()
                                     navigator.navigate(Screen.Integrations)
@@ -2050,95 +1804,17 @@ fun MetrolistApp(
                                     .background(Color.Black),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (hasVideo && videoPlayer != null) {
-                                MusicVideoSurface(
-                                    player = videoPlayer,
-                                    artworkUrl = currentSong?.thumbnail,
-                                    modifier = Modifier.fillMaxSize(),
-                                    fillContainer = true,
-                                    useSurfaceView = true,
-                                    showControls = false,
-                                    isPip = true,
-                                    cornerRadius = 0.dp,
-                                )
-                            } else {
-                                AsyncImage(
-                                    url = currentSong?.thumbnail,
-                                    contentDescription = currentSong?.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                            AsyncImage(
+                                url = currentSong?.thumbnail,
+                                contentDescription = currentSong?.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ListenTogetherPlaybackRequestHandler(playerConnection: PlayerConnection) {
-    var request by remember { mutableStateOf<ListenTogetherPlaybackRequest?>(null) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(playerConnection) {
-        playerConnection.listenTogetherPlaybackRequests.collect { request = it }
-    }
-
-    PopupContent(request) { pending ->
-        AlertDialog(
-            onDismissRequest = { request = null },
-            icon = {
-                Icon(
-                    imageVector = MetrolistIcons.Filled.Groups,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            },
-            title = { Text(stringResource(Res.string.listen_together_guest_choice_title)) },
-            text = { Text(stringResource(Res.string.listen_together_guest_choice_message)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        AndroidListenTogetherManager.suggestTrack(pending.song)
-                        request = null
-                    },
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(stringResource(Res.string.listen_together_guest_queue))
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { request = null }, shapes = ButtonDefaults.shapes()) {
-                        Text(stringResource(Res.string.cancel))
-                    }
-                    TextButton(
-                        onClick = {
-                            request = null
-                            scope.launch {
-                                if (AndroidListenTogetherManager.leaveRoomAndWait()) {
-                                    if (pending.queue.isNotEmpty()) {
-                                        playerConnection.playQueue(
-                                            pending.queue,
-                                            pending.startIndex,
-                                            pending.queueTitle,
-                                            shuffleModeEnabled = pending.shuffleModeEnabled,
-                                        )
-                                    } else {
-                                        playerConnection.playSong(pending.song, "")
-                                    }
-                                }
-                            }
-                        },
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Text(stringResource(Res.string.listen_together_guest_solo))
-                    }
-                }
-            },
-        )
     }
 }
 
@@ -2282,12 +1958,6 @@ sealed class IncomingDestination {
 
     object Downloads : IncomingDestination()
 
-    data class PlaylistImport(
-        val resultMessage: String?,
-    ) : IncomingDestination()
-
-    object ListenTogetherRoom : IncomingDestination()
-
     object Updates : IncomingDestination()
 
     object Settings : IncomingDestination()
@@ -2295,10 +1965,6 @@ sealed class IncomingDestination {
     object Login : IncomingDestination()
 
     object BackupRestore : IncomingDestination()
-
-    object Recognition : IncomingDestination()
-
-    object LastFm : IncomingDestination()
 
     object Player : IncomingDestination()
 
@@ -2330,10 +1996,6 @@ sealed class IncomingDestination {
         val id: String,
         val params: String?,
         val title: String?,
-    ) : IncomingDestination()
-
-    data class ListenTogether(
-        val roomCode: String,
     ) : IncomingDestination()
 
     data class PlayVideo(
@@ -2375,23 +2037,17 @@ fun Intent.toIncomingDestination(): IncomingDestination? {
     return when (action) {
         MainActivity.ACTION_SEARCH -> IncomingDestination.Search(null)
         MainActivity.ACTION_LIBRARY -> IncomingDestination.Library
-        MainActivity.ACTION_PLAYLIST_IMPORT -> IncomingDestination.PlaylistImport(getStringExtra(MainActivity.EXTRA_IMPORT_RESULT_MESSAGE))
         MainActivity.ACTION_DOWNLOADS -> IncomingDestination.Downloads
-        MainActivity.ACTION_LISTEN_TOGETHER -> IncomingDestination.ListenTogetherRoom
         MainActivity.ACTION_UPDATES -> IncomingDestination.Updates
         MainActivity.ACTION_LOGIN -> IncomingDestination.Login
         Intent.ACTION_APPLICATION_PREFERENCES -> IncomingDestination.Settings
         MainActivity.ACTION_BACKUP_RESTORE -> IncomingDestination.BackupRestore
-        MainActivity.ACTION_RECOGNITION -> IncomingDestination.Recognition
-        MainActivity.ACTION_LASTFM -> IncomingDestination.LastFm
         else -> null
     }
 }
 
 private fun incomingUrlDestination(rawUri: String): IncomingDestination? {
     parseYouTubePodcastId(rawUri)?.let { return IncomingDestination.Podcast(it) }
-    parseListenTogetherInvitation(rawUri)?.let { return IncomingDestination.ListenTogether(it) }
-    extractListenTogetherRoomCode(rawUri)?.let { return IncomingDestination.ListenTogether(it) }
     when (val parsed = parseYouTubeUrl(rawUri)) {
         is YouTubeUrlParser.ParsedUrl.Video -> {
             return IncomingDestination.PlayVideo(parsed.id, null, parseYouTubeStartPositionMs(rawUri))
@@ -2437,24 +2093,11 @@ fun Intent.widgetTargetDestination(): IncomingDestination? {
 
         "AUTO_PLAYLIST" -> IncomingDestination.AutoPlaylist(id)
 
-        PlaylistWidgetReceiver.TARGET_TYPE_LOCAL,
-        PlaylistWidgetReceiver.TARGET_TYPE_ONLINE,
-        PlaylistWidgetReceiver.TARGET_TYPE_COLLECTION,
-        -> IncomingDestination.Playlist(id)
-
-        PlaylistWidgetReceiver.TARGET_TYPE_LIKED -> IncomingDestination.AutoPlaylist("liked")
-
-        PlaylistWidgetReceiver.TARGET_TYPE_DOWNLOADED -> IncomingDestination.AutoPlaylist("downloaded")
-
-        PlaylistWidgetReceiver.TARGET_TYPE_TOP -> IncomingDestination.AutoPlaylist("top100")
-
         "SONG" -> IncomingDestination.PlayVideo(id, null)
 
         else -> null
     }
 }
-
-fun String.sanitizeRoomCode(): String = filter { it.isLetterOrDigit() }.uppercase().take(8)
 
 fun resolveAndPersistStartupScreen(): Screen {
     val default =
@@ -2489,7 +2132,6 @@ fun getEntryProvider(
     // Getters: nav3 keeps a retained entry's content across provider changes, so entries must read the current value.
     pendingSearchQuery: () -> String?,
     onSearchQueryConsumed: () -> Unit,
-    pendingRoomCode: () -> String?,
     floatingActionsBottomInset: State<Dp>,
     homeScrollToTopEvents: SharedFlow<Long>,
     libraryScrollToTopEvents: SharedFlow<Long>,
@@ -2504,7 +2146,6 @@ fun getEntryProvider(
                 onNavigateToArtist = { artistId -> navigator.navigate(Screen.Artist(artistId)) },
                 onNavigateToPlaylist = { id, thumbnail -> navigator.navigate(Screen.Playlist(id, thumbnailHint = thumbnail)) },
                 onNavigateToPodcast = { podcastId -> navigator.navigate(Screen.Podcast(podcastId)) },
-                onNavigateToRecognition = { navigator.navigate(Screen.Recognition) },
                 onNavigateToWrapped = { navigator.navigate(Screen.Wrapped) },
                 onNavigateToLibrary = { filter ->
                     filter?.let { Settings.shared.libraryFilter = it }
@@ -2550,7 +2191,7 @@ fun getEntryProvider(
                 browseId = browse.browseId,
                 params = browse.params,
                 title = browse.title,
-                startVideo = browse.startVideo,
+                startVideo = false,
                 onBackClick = { navigator.goBack() },
                 onNavigateToAlbum = { albumId -> navigator.navigate(Screen.Album(albumId)) },
                 onNavigateToArtist = { artistId -> navigator.navigate(Screen.Artist(artistId)) },
@@ -2571,7 +2212,6 @@ fun getEntryProvider(
                 onNavigateToArtist = { artistId -> navigator.navigate(Screen.Artist(artistId)) },
                 onNavigateToPlaylist = { id, thumbnail -> navigator.navigate(Screen.Playlist(id, thumbnailHint = thumbnail)) },
                 onNavigateToPodcast = { podcastId -> navigator.navigate(Screen.Podcast(podcastId)) },
-                onNavigateToPlaylistImport = { navigator.navigate(Screen.PlaylistImport) },
                 onNavigateToAutoPlaylist = { type ->
                     // Keep podcast auto playlists on the Library stack so Back returns to the podcast library.
                     navigator.navigate(Screen.Library)
@@ -2590,15 +2230,6 @@ fun getEntryProvider(
             )
         }
 
-        entry<Screen.Recognition>(metadata = navTabMetadata) {
-            RecognitionScreen(
-                onNavigateBack = { navigator.goBack() },
-                onNavigateToHistory = { navigator.navigate(Screen.RecognitionHistory) },
-            )
-        }
-        entry<Screen.RecognitionHistory>(metadata = navTabMetadata) {
-            RecognitionHistoryScreen(onNavigateBack = { navigator.goBack() })
-        }
         entry<Screen.History>(metadata = navTabMetadata) {
             HistoryScreen(onNavigateBack = { navigator.goBack() })
         }
@@ -2685,15 +2316,6 @@ fun getEntryProvider(
         entry<Screen.Integrations>(metadata = navTabMetadata) {
             IntegrationsScreen(
                 onNavigateBack = { navigator.goBack() },
-                onNavigateToListenTogether = { navigator.navigate(Screen.ListenTogetherSettings) },
-            )
-        }
-
-        entry<Screen.Discord>(metadata = navTabMetadata) {
-            SettingsIntegrationsScreen(
-                onNavigateBack = { navigator.goBack() },
-                onNavigateToListenTogether = { navigator.navigate(Screen.ListenTogetherSettings) },
-                initialPage = SettingsPageId.DISCORD,
             )
         }
 
@@ -2763,61 +2385,8 @@ fun getEntryProvider(
             UpdateDetailsScreen(onNavigateBack = { navigator.goBack() })
         }
 
-        entry<Screen.LastFm>(metadata = navTabMetadata) {
-            SettingsIntegrationsScreen(
-                onNavigateBack = { navigator.goBack() },
-                onNavigateToListenTogether = { navigator.navigate(Screen.ListenTogetherSettings) },
-                initialPage = SettingsPageId.LAST_FM,
-            )
-        }
-
-        entry<Screen.ListenBrainz>(metadata = navTabMetadata) {
-            SettingsIntegrationsScreen(
-                onNavigateBack = { navigator.goBack() },
-                onNavigateToListenTogether = { navigator.navigate(Screen.ListenTogetherSettings) },
-                initialPage = SettingsPageId.LISTEN_BRAINZ,
-            )
-        }
-
-        entry<Screen.ListenTogether>(metadata = navTabMetadata) {
-            ListenTogetherScreen(
-                initialRoomCode = pendingRoomCode(),
-                onNavigateBack = { navigator.goBack() },
-                onNavigateToSettings = { navigator.navigate(Screen.ListenTogetherSettings) },
-            )
-        }
-
-        entry<Screen.ListenTogetherSettings>(metadata = navTabMetadata) {
-            ListenTogetherSettingsScreen(
-                onNavigateBack = { navigator.goBack() },
-                onNavigateToServer = { navigator.navigate(Screen.ListenTogetherServer) },
-                onNavigateToBlockedUsers = { navigator.navigate(Screen.ListenTogetherBlockedUsers) },
-                onNavigateToLogs = { navigator.navigate(Screen.ListenTogetherLogs) },
-            )
-        }
-
-        entry<Screen.ListenTogetherServer>(metadata = navTabMetadata) {
-            ListenTogetherServerScreen(onNavigateBack = { navigator.goBack() })
-        }
-
-        entry<Screen.ListenTogetherBlockedUsers>(metadata = navTabMetadata) {
-            ListenTogetherBlockedUsersScreen(onNavigateBack = { navigator.goBack() })
-        }
-
-        entry<Screen.ListenTogetherLogs>(metadata = navTabMetadata) {
-            ListenTogetherLogsScreen(onNavigateBack = { navigator.goBack() })
-        }
-
         entry<Screen.BackupRestore>(metadata = navTabMetadata) {
             BackupRestoreScreen(onNavigateBack = { navigator.goBack() })
-        }
-
-        entry<Screen.PlaylistImport>(metadata = navTabMetadata) {
-            PlaylistImportScreen(onNavigateBack = { navigator.goBack() })
-        }
-
-        entry<Screen.AndroidAuto>(metadata = navTabMetadata) {
-            AndroidAutoScreen(onNavigateBack = { navigator.goBack() })
         }
 
         entry<Screen.Settings>(metadata = navTabMetadata) {
@@ -2903,12 +2472,7 @@ fun getEntryProvider(
                 contentKey = entry.contentKey,
                 metadata = entry.metadata + (NAVIGATION_ROUTE_METADATA_KEY to route),
             ) {
-                TvNavigationFocus(
-                    requestInitialFocus = !route.isVisibleNavigationScreen(),
-                    hasFocusableContent = route != Screen.EasterEgg,
-                ) {
-                    NavigationDestination(route as Screen, LocalNavAnimatedContentScope.current) { entry.Content() }
-                }
+                NavigationDestination(route as Screen, LocalNavAnimatedContentScope.current) { entry.Content() }
             }
         }
     }

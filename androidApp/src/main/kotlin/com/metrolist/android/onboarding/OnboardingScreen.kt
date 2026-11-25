@@ -24,9 +24,7 @@ import com.metrolist.android.locale.AppLocale
 import com.metrolist.android.locale.rememberAppLanguageChoices
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.back
-import com.metrolist.shared.generated.resources.brand_discord
 import com.metrolist.shared.generated.resources.brand_google
-import com.metrolist.shared.generated.resources.brand_lastfm
 import com.metrolist.shared.generated.resources.continue_action
 import com.metrolist.shared.generated.resources.finish
 import com.metrolist.shared.generated.resources.no
@@ -57,7 +55,6 @@ import com.metrolist.shared.generated.resources.side_menu_welcome
 import com.metrolist.shared.generated.resources.yes
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.ui.icons.MetrolistIcons
-import com.metrolist.shared.ui.icons.MetrolistIconsBrand
 import com.metrolist.shared.ui.onboarding.OnboardingPage
 import com.metrolist.shared.ui.onboarding.OnboardingPageContent
 import com.metrolist.shared.ui.onboarding.OnboardingPreferences
@@ -414,8 +411,6 @@ private fun OnboardingPage.description(): String =
 @Composable
 private fun savedAccounts(): List<OnboardingAccount> {
     val google = stringResource(Res.string.brand_google)
-    val lastFm = stringResource(Res.string.brand_lastfm)
-    val discord = stringResource(Res.string.brand_discord)
     return buildList {
         if (
             Settings.shared.accountName.isNotBlank() ||
@@ -429,31 +424,6 @@ private fun savedAccounts(): List<OnboardingAccount> {
                     imageUrl = Settings.shared.accountThumbnail.ifBlank { null },
                     fallbackIcon = MetrolistIcons.Outlined.AccountCircle,
                     fetchGoogleImage = true,
-                ),
-            )
-        }
-        if (Settings.shared.lastFmUsername.isNotBlank() || Settings.shared.lastFmSession.isNotBlank()) {
-            add(
-                OnboardingAccount(
-                    service = lastFm,
-                    displayName = Settings.shared.lastFmUsername.ifBlank { lastFm },
-                    imageUrl = null,
-                    fallbackIcon = MetrolistIconsBrand.LastFm,
-                    fetchLastFmImage = true,
-                ),
-            )
-        }
-        if (
-            Settings.shared.discordName.isNotBlank() ||
-            Settings.shared.discordUsername.isNotBlank() ||
-            Settings.shared.discordAvatar.isNotBlank()
-        ) {
-            add(
-                OnboardingAccount(
-                    service = discord,
-                    displayName = Settings.shared.discordName.ifBlank { Settings.shared.discordUsername },
-                    imageUrl = Settings.shared.discordAvatar.ifBlank { null },
-                    fallbackIcon = MetrolistIconsBrand.Discord,
                 ),
             )
         }

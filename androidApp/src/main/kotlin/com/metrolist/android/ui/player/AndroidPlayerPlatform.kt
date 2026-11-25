@@ -3,7 +3,6 @@ package com.metrolist.android.ui.player
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.view.accessibility.AccessibilityManager
@@ -36,12 +35,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.datasource.ByteArrayDataSource
-import androidx.media3.datasource.DataSource
-import com.metrolist.android.App
 import com.metrolist.android.LocalPlaylistAdder
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.playback.PlayerConnection
 import com.metrolist.android.playback.SongDownloadManager
 import com.metrolist.android.ui.component.AdaptiveModalBottomSheet
@@ -60,13 +55,10 @@ import com.metrolist.shared.generated.resources.queued_songs
 import com.metrolist.shared.generated.resources.share_lyrics
 import com.metrolist.shared.generated.resources.share_song_to_story
 import com.metrolist.shared.generated.resources.unknown
-import com.metrolist.shared.listentogether.ListenTogetherManager
-import com.metrolist.shared.listentogether.ListenTogetherRoomRole
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.settings.displayName
 import com.metrolist.shared.state.SongLikeState
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.PlayerMenuAction
 import com.metrolist.shared.ui.components.PopupContent
 import com.metrolist.shared.ui.components.lyrics.LyricsShareDialog
@@ -78,7 +70,6 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
-import com.metrolist.android.ui.components.AnimatedCoverVideo as AndroidAnimatedCoverVideo
 import com.metrolist.android.ui.menu.LyricsMenu as AndroidLyricsMenu
 import com.metrolist.android.ui.menu.PlayerMenu as AndroidPlayerMenu
 import com.metrolist.android.ui.menu.QueueMenu as AndroidQueueMenu
@@ -89,19 +80,13 @@ import com.metrolist.shared.ui.components.rememberModalSheetState as rememberBot
 class AndroidPlayerPlatform(
     private val activity: Activity?,
     private val playerConnection: PlayerConnection,
-    private val listenTogetherManager: ListenTogetherManager?,
 ) : PlayerPlatform {
-    override val supportsPictureInPicture = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-    override val supportsVideoPlayback = true
+    override val supportsPictureInPicture = false
+    override val supportsVideoPlayback = false
     override val supportsCasting = true
 
     @Composable
-    override fun isListenTogetherGuest(): Boolean {
-        val manager = listenTogetherManager
-        val role by manager?.role?.collectAsState() ?: remember { mutableStateOf(ListenTogetherRoomRole.NONE) }
-        val isInRoom by manager?.isInRoom?.collectAsState() ?: remember { mutableStateOf(false) }
-        return isInRoom && role == ListenTogetherRoomRole.GUEST
-    }
+    override fun isListenTogetherGuest(): Boolean = false
 
     @Composable
     override fun isDeviceConnectActive(): Boolean {
@@ -219,17 +204,7 @@ class AndroidPlayerPlatform(
     override fun enterPictureInPicture(
         isPlaying: Boolean,
         hasVideo: Boolean,
-    ) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val activity = activity ?: return
-        val videoPlayer = playerConnection.videoPlayer
-        PictureInPictureHelper.enterPictureInPicture(
-            activity = activity,
-            isPlaying = isPlaying,
-            videoSize = videoPlayer?.videoSize,
-            hasVideo = hasVideo && videoPlayer != null,
-        )
-    }
+    ) = Unit
 
     @Composable
     override fun MusicVideoSurface(
@@ -240,28 +215,13 @@ class AndroidPlayerPlatform(
         useSurfaceView: Boolean,
         onFullscreenClick: (() -> Unit)?,
         onPiPClick: (() -> Unit)?,
-    ) {
-        val isConnected by playerConnection.isConnected.collectAsState()
-        val song by playerConnection.currentSong.collectAsState()
-        MusicVideoSurface(
-            player = if (isConnected) playerConnection.videoPlayer else null,
-            artworkUrl = song?.thumbnail,
-            modifier = modifier,
-            cornerRadius = cornerRadius,
-            fillContainer = fillContainer,
-            cropVideoToFill = false,
-            useSurfaceView = useSurfaceView,
-            showControls = showControls,
-            onFullscreenClick = onFullscreenClick,
-            onPiPClick = onPiPClick.takeIf { supportsPictureInPicture },
-        )
-    }
+    ) = Unit
 
     override fun canvasCacheKey(
         songId: String,
         source: CanvasContentSource,
         quality: String,
-    ): String = CanvasCache.key(songId, source.name, quality)
+    ): String = ""
 
     @Composable
     override fun AnimatedCoverVideo(
@@ -276,19 +236,7 @@ class AndroidPlayerPlatform(
         onReadyChanged: ((Boolean) -> Unit)?,
         onFrame: ((ImageBitmap?) -> Unit)?,
         modifier: Modifier,
-    ) = AndroidAnimatedCoverVideo(
-        url = url,
-        modifier = modifier,
-        headers = headers,
-        playbackResource = playbackResource,
-        cacheKey = cacheKey,
-        playing = playing,
-        clips = clips,
-        dataSourceFactory = remember(videoBytes) { videoBytes?.let { bytes -> DataSource.Factory { ByteArrayDataSource(bytes) } } },
-        onError = onError,
-        onReadyChanged = onReadyChanged,
-        onFrame = onFrame,
-    )
+    ) = Unit
 
     @Composable
     override fun PlayerMenu(
@@ -552,8 +500,5 @@ class AndroidPlayerPlatform(
     override fun prepareListenTogetherQueueImport(
         title: String,
         songs: List<SongItem>,
-    ) {
-        val manager = listenTogetherManager ?: AndroidListenTogetherManager.initialize(activity ?: App.instance, playerConnection)
-        manager.prepareQueueImport(title, songs)
-    }
+    ) = Unit
 }

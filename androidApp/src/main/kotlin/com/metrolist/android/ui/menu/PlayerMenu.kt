@@ -55,9 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.metrolist.android.LocalListenTogetherManager
 import com.metrolist.android.LocalPlaylistAdder
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.playback.AudioCacheManager
 import com.metrolist.android.playback.LocalPlayerConnection
 import com.metrolist.android.playback.SongDownloadManager
@@ -67,18 +65,11 @@ import com.metrolist.android.ui.download.rememberDownloadPermissionGate
 import com.metrolist.shared.db.MusicDatabase
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.action_download
-import com.metrolist.shared.generated.resources.back
 import com.metrolist.shared.generated.resources.blocked_artists_count
 import com.metrolist.shared.generated.resources.could_not_queue_download
 import com.metrolist.shared.generated.resources.disliked_song
 import com.metrolist.shared.generated.resources.download_not_found
 import com.metrolist.shared.generated.resources.equalizer
-import com.metrolist.shared.generated.resources.listen_together
-import com.metrolist.shared.generated.resources.music_video_quality_auto
-import com.metrolist.shared.generated.resources.music_video_quality_resolution
-import com.metrolist.shared.generated.resources.music_video_resolution
-import com.metrolist.shared.generated.resources.music_video_resolution_current
-import com.metrolist.shared.generated.resources.music_video_resolution_desc
 import com.metrolist.shared.generated.resources.percent_symbol
 import com.metrolist.shared.generated.resources.playback_speed
 import com.metrolist.shared.generated.resources.queued_song
@@ -86,20 +77,15 @@ import com.metrolist.shared.generated.resources.remove_download
 import com.metrolist.shared.generated.resources.removed_dislike
 import com.metrolist.shared.generated.resources.removed_download
 import com.metrolist.shared.generated.resources.song_details
-import com.metrolist.shared.generated.resources.suggested_to_host
 import com.metrolist.shared.generated.resources.system_equalizer_unavailable
 import com.metrolist.shared.generated.resources.tempo_and_pitch
 import com.metrolist.shared.generated.resources.unknown
 import com.metrolist.shared.generated.resources.unknown_artist
 import com.metrolist.shared.generated.resources.volume
-import com.metrolist.shared.listentogether.ListenTogetherRoomRole
 import com.metrolist.shared.model.previewAspectRatio
-import com.metrolist.shared.settings.MusicVideoQuality
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.settings.displayName
-import com.metrolist.shared.settings.targetHeight
 import com.metrolist.shared.state.SongLikeState
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.PlayerMenuAction
 import com.metrolist.shared.ui.components.PlayerMenuActionGroup
 import com.metrolist.shared.ui.components.PlayerMenuPrimaryActions
@@ -118,7 +104,6 @@ import com.metrolist.shared.ui.menu.dislikeMenuAction
 import com.metrolist.shared.ui.menu.equalizerMenuAction
 import com.metrolist.shared.ui.menu.rememberDeleteUploadAction
 import com.metrolist.shared.ui.menu.songPrimaryActions
-import com.metrolist.shared.ui.menu.suggestToHostMenuAction
 import com.metrolist.shared.ui.menu.tempoPitchMenuAction
 import com.metrolist.shared.ui.navigation.NavigationBackHandler
 import com.metrolist.shared.ui.navigation.acceptsInput
@@ -147,12 +132,10 @@ fun PlayerMenu(
     onDismiss: () -> Unit,
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
-    onNavigateToListenTogether: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onNavigateToListenTogether: () -> Unit = {},
     onShowSongDetails: () -> Unit = onDismiss,
     extraActions: List<PlayerMenuAction> = emptyList(),
 ) {
-    val suggestedToHostText = stringResource(Res.string.suggested_to_host)
-
     val uiState by playerViewModel.uiState.collectAsState()
     val currentSong = uiState.currentSong
     val songTitle = currentSong?.title ?: stringResource(Res.string.unknown)
@@ -169,27 +152,18 @@ fun PlayerMenu(
     val downloadManager: SongDownloadManager = koinInject()
     val audioCacheManager: AudioCacheManager = koinInject()
     val requireDownloadNotifications = rememberDownloadPermissionGate()
-    val listenTogetherManager = LocalListenTogetherManager.current
-    val listenTogetherRole by listenTogetherManager?.role?.collectAsState()
-        ?: remember { mutableStateOf(ListenTogetherRoomRole.NONE) }
-    val isInListenTogetherRoom by listenTogetherManager?.isInRoom?.collectAsState()
-        ?: remember { mutableStateOf(false) }
-
-    val isGuest = isInListenTogetherRoom && listenTogetherRole == ListenTogetherRoomRole.GUEST
 
     val systemEqualizerUnavailable = stringResource(Res.string.system_equalizer_unavailable)
     val systemEqualizerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
     val playerConnection = LocalPlayerConnection.current
-    val currentPlaybackResource by playerConnection?.currentPlaybackResource?.collectAsState() ?: remember { mutableStateOf(null) }
 
     val addToPlaylist = LocalPlaylistAdder.current
-    val isTv = LocalIsTv.current
     val menuSheetState = rememberModalSheetState()
     var showPlaybackSpeed by remember { mutableStateOf(false) }
     var showEqualizer by remember { mutableStateOf(false) }
     if (showEqualizer) {
         EqualizerDialog(
-            onDismiss = { if (isTv) showEqualizer = false else onDismiss() },
+            onDismiss = onDismiss,
             rememberProfilePicker = { onPicked -> rememberMetroEqProfilePicker(onPicked) },
             onOpenSystemEqualizer = {
                 if (!launchSystemEqualizer(context, playerConnection?.audioSessionId ?: 0) {
@@ -199,33 +173,27 @@ fun PlayerMenu(
                     Toast.makeText(context, systemEqualizerUnavailable, Toast.LENGTH_SHORT).show()
                 }
             },
-            metroEqContent =
-                if (isTv) {
-                    null
-                } else {
-                    { close, searchAutoEq ->
-                        MetroEqSheet(
-                            onDismiss = close,
-                            varispeed = Settings.shared.varispeed,
-                            rememberProfilePicker = { onPicked -> rememberMetroEqProfilePicker(onPicked) },
-                            initialAutoEqSearch = searchAutoEq,
-                        ) { onBack ->
-                            TempoPitchControls(
-                                speed = playbackSpeed,
-                                pitch = playbackPitch,
-                                onSpeedChange = onPlaybackSpeedChange,
-                                onPitchChange = onPlaybackPitchChange,
-                                speedEnabled = !isInListenTogetherRoom,
-                                varispeed = Settings.shared.varispeed,
-                                onDone = onBack,
-                            )
-                        }
-                    }
-                },
+            metroEqContent = { close, searchAutoEq ->
+                MetroEqSheet(
+                    onDismiss = close,
+                    varispeed = Settings.shared.varispeed,
+                    rememberProfilePicker = { onPicked -> rememberMetroEqProfilePicker(onPicked) },
+                    initialAutoEqSearch = searchAutoEq,
+                ) { onBack ->
+                    TempoPitchControls(
+                        speed = playbackSpeed,
+                        pitch = playbackPitch,
+                        onSpeedChange = onPlaybackSpeedChange,
+                        onPitchChange = onPlaybackPitchChange,
+                        speedEnabled = true,
+                        varispeed = Settings.shared.varispeed,
+                        onDone = onBack,
+                    )
+                }
+            },
         )
-        if (!isTv) return
+        return
     }
-    var showVideoResolution by remember { mutableStateOf(false) }
     var downloadRefreshKey by remember { mutableIntStateOf(0) }
     var isDownloaded by remember(currentSong?.id) { mutableStateOf(false) }
     val isDisliked = currentSong?.id?.let { SongLikeState.isDisliked(it) } ?: false
@@ -246,330 +214,264 @@ fun PlayerMenu(
         scrollContent = false,
         sheetState = menuSheetState,
     ) {
-        if (showVideoResolution) {
-            VideoResolutionPage(
-                currentHeight = currentPlaybackResource?.videoHeight,
-                availableHeights = currentPlaybackResource?.availableVideoHeights.orEmpty(),
-                selectedQuality = Settings.shared.musicVideoQuality,
-                onSelect = { quality ->
-                    playerViewModel.changeMusicVideoResolution(quality)
-                    showVideoResolution = false
-                    onDismiss()
-                },
-                onBack = { showVideoResolution = false },
-            )
-        } else {
-            val motion = rememberNavigationMotion()
-            NavigationBackHandler(enabled = showPlaybackSpeed && !isTv) { showPlaybackSpeed = false }
-            AnimatedContent(
-                targetState = showPlaybackSpeed,
-                transitionSpec = { motion.transition(isPop = !targetState) },
-                label = "playerMenuTempoPitch",
-            ) { playbackSpeedPage ->
-                Box(Modifier.blockInput(!transition.acceptsInput(EnterExitState.Visible))) {
-                    if (playbackSpeedPage) {
-                        PlaybackSpeedPage(
-                            speed = playbackSpeed,
-                            onSpeedChange = onPlaybackSpeedChange,
-                            pitch = playbackPitch,
-                            onPitchChange = onPlaybackPitchChange,
-                            speedEnabled = !isInListenTogetherRoom,
-                            varispeed = Settings.shared.varispeed,
-                            onBack = { showPlaybackSpeed = false },
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding =
-                                PaddingValues(
-                                    bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
-                                ),
-                        ) {
-                            item {
-                                ExpressiveMediaMenuHeader(
-                                    title = songTitle,
-                                    subtitle = artistName,
-                                    thumbnail = thumbnail,
-                                    thumbnailAspectRatio = currentSong?.toSongItem()?.previewAspectRatio ?: 1f,
-                                    subtitleLinks =
-                                        artistLinksText(currentSong?.artists.orEmpty()) {
-                                            onNavigateToArtist(it)
-                                            onDismiss()
-                                        },
-                                )
-                            }
+        val motion = rememberNavigationMotion()
+        NavigationBackHandler(enabled = showPlaybackSpeed) { showPlaybackSpeed = false }
+        AnimatedContent(
+            targetState = showPlaybackSpeed,
+            transitionSpec = { motion.transition(isPop = !targetState) },
+            label = "playerMenuTempoPitch",
+        ) { playbackSpeedPage ->
+            Box(Modifier.blockInput(!transition.acceptsInput(EnterExitState.Visible))) {
+                if (playbackSpeedPage) {
+                    PlaybackSpeedPage(
+                        speed = playbackSpeed,
+                        onSpeedChange = onPlaybackSpeedChange,
+                        pitch = playbackPitch,
+                        onPitchChange = onPlaybackPitchChange,
+                        speedEnabled = true,
+                        varispeed = Settings.shared.varispeed,
+                        onBack = { showPlaybackSpeed = false },
+                    )
+                } else {
+                    LazyColumn(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding =
+                            PaddingValues(
+                                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                            ),
+                    ) {
+                        item {
+                            ExpressiveMediaMenuHeader(
+                                title = songTitle,
+                                subtitle = artistName,
+                                thumbnail = thumbnail,
+                                thumbnailAspectRatio = currentSong?.toSongItem()?.previewAspectRatio ?: 1f,
+                                subtitleLinks =
+                                    artistLinksText(currentSong?.artists.orEmpty()) {
+                                        onNavigateToArtist(it)
+                                        onDismiss()
+                                    },
+                            )
+                        }
 
-                            if (extraActions.isNotEmpty()) {
-                                item { PlayerMenuActionGroup(actions = extraActions) }
-                            }
+                        if (extraActions.isNotEmpty()) {
+                            item { PlayerMenuActionGroup(actions = extraActions) }
+                        }
 
-                            item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(28.dp),
-                                    colors =
-                                        CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        ),
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(28.dp),
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    ),
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    Text(
+                                        text = stringResource(Res.string.volume),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
-                                        Text(
-                                            text = stringResource(Res.string.volume),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
+                                        val percentSymbol = stringResource(Res.string.percent_symbol)
+                                        val volumeLabelStyle =
+                                            MaterialTheme.typography.labelLarge.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontFeatureSettings = "tnum",
+                                            )
+                                        val textMeasurer = rememberTextMeasurer()
+                                        val volumeLabelWidth =
+                                            with(LocalDensity.current) {
+                                                textMeasurer
+                                                    .measure(100.toString() + percentSymbol, volumeLabelStyle)
+                                                    .size.width
+                                                    .toDp()
+                                            }
+                                        val sliderState = rememberSliderState(value = volume)
+                                        sliderState.value = volume
+                                        Slider(
+                                            state = sliderState,
+                                            onValueChange = onVolumeChange,
+                                            modifier = Modifier.weight(1f),
+                                            colors =
+                                                SliderDefaults.colors(
+                                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                                    inactiveTrackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                                ),
                                         )
 
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        ) {
-                                            val percentSymbol = stringResource(Res.string.percent_symbol)
-                                            val volumeLabelStyle =
-                                                MaterialTheme.typography.labelLarge.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontFeatureSettings = "tnum",
-                                                )
-                                            val textMeasurer = rememberTextMeasurer()
-                                            val volumeLabelWidth =
-                                                with(LocalDensity.current) {
-                                                    textMeasurer
-                                                        .measure(100.toString() + percentSymbol, volumeLabelStyle)
-                                                        .size.width
-                                                        .toDp()
-                                                }
-                                            val sliderState = rememberSliderState(value = volume)
-                                            sliderState.value = volume
-                                            Slider(
-                                                state = sliderState,
-                                                onValueChange = onVolumeChange,
-                                                modifier = Modifier.weight(1f),
-                                                colors =
-                                                    SliderDefaults.colors(
-                                                        thumbColor = MaterialTheme.colorScheme.primary,
-                                                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                                                        inactiveTrackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                                                    ),
-                                            )
-
-                                            Text(
-                                                text = (volume.coerceIn(0f, 1f) * 100).roundToInt().toString() + percentSymbol,
-                                                modifier = Modifier.width(volumeLabelWidth),
-                                                style = volumeLabelStyle,
-                                                textAlign = TextAlign.End,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
+                                        Text(
+                                            text = (volume.coerceIn(0f, 1f) * 100).roundToInt().toString() + percentSymbol,
+                                            modifier = Modifier.width(volumeLabelWidth),
+                                            style = volumeLabelStyle,
+                                            textAlign = TextAlign.End,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                 }
                             }
+                        }
 
-                            item {
-                                PlayerMenuPrimaryActions(
-                                    actions =
-                                        songPrimaryActions(
-                                            onDismiss = onDismiss,
-                                            isGuest = isGuest,
-                                            onStartRadio = currentSong?.let { song -> { playerViewModel.startRadio(song.toSongItem()) } },
-                                            onAddToPlaylist = {
-                                                currentSong?.toSongItem()?.let { song ->
-                                                    addToPlaylist(listOf(song))
-                                                    onDismiss()
-                                                }
-                                            },
-                                            onShare = playerViewModel::shareSong,
-                                            onAltShare = { playerViewModel.copySongLink() },
-                                        ),
-                                )
-                            }
-
-                            if (isGuest) {
-                                item {
-                                    PlayerMenuActionGroup(
-                                        actions =
-                                            listOf(
-                                                suggestToHostMenuAction(onDismiss) {
-                                                    currentSong?.toSongItem()?.let { AndroidListenTogetherManager.suggestTrack(it) }
-                                                    Toast.makeText(context, suggestedToHostText, Toast.LENGTH_SHORT).show()
-                                                },
-                                            ),
-                                    )
-                                }
-                            }
-
-                            deleteUploadAction?.let { action ->
-                                item { PlayerMenuActionGroup(actions = listOf(action)) }
-                            }
-
-                            item {
-                                PlayerMenuActionGroup(
-                                    actions =
-                                        buildList {
-                                            artistAction?.let(::add)
-                                            albumNavigationMenuAction(
-                                                onDismiss,
-                                                currentSong?.albumId?.let { albumId -> { onNavigateToAlbum(albumId) } },
-                                                currentSong?.album?.takeIf { it.isNotBlank() },
-                                            )?.let(::add)
-                                            add(
-                                                PlayerMenuAction(
-                                                    icon = MetrolistIcons.Outlined.Info,
-                                                    title = stringResource(Res.string.song_details),
-                                                    onClick = onShowSongDetails,
-                                                ),
-                                            )
+                        item {
+                            PlayerMenuPrimaryActions(
+                                actions =
+                                    songPrimaryActions(
+                                        onDismiss = onDismiss,
+                                        isGuest = false,
+                                        onStartRadio = currentSong?.let { song -> { playerViewModel.startRadio(song.toSongItem()) } },
+                                        onAddToPlaylist = {
+                                            currentSong?.toSongItem()?.let { song ->
+                                                addToPlaylist(listOf(song))
+                                                onDismiss()
+                                            }
                                         },
-                                )
-                            }
+                                        onShare = playerViewModel::shareSong,
+                                        onAltShare = { playerViewModel.copySongLink() },
+                                    ),
+                            )
+                        }
 
-                            if (uiState.isVideoModeActive && !isInListenTogetherRoom) {
-                                item {
-                                    PlayerMenuActionGroup(
-                                        actions =
-                                            listOf(
-                                                PlayerMenuAction(
-                                                    icon = MetrolistIcons.Outlined.Tune,
-                                                    title = stringResource(Res.string.music_video_resolution),
-                                                    description = stringResource(Res.string.music_video_resolution_desc),
-                                                    onClick = { showVideoResolution = true },
-                                                ),
+                        deleteUploadAction?.let { action ->
+                            item { PlayerMenuActionGroup(actions = listOf(action)) }
+                        }
+
+                        item {
+                            PlayerMenuActionGroup(
+                                actions =
+                                    buildList {
+                                        artistAction?.let(::add)
+                                        albumNavigationMenuAction(
+                                            onDismiss,
+                                            currentSong?.albumId?.let { albumId -> { onNavigateToAlbum(albumId) } },
+                                            currentSong?.album?.takeIf { it.isNotBlank() },
+                                        )?.let(::add)
+                                        add(
+                                            PlayerMenuAction(
+                                                icon = MetrolistIcons.Outlined.Info,
+                                                title = stringResource(Res.string.song_details),
+                                                onClick = onShowSongDetails,
                                             ),
-                                    )
-                                }
-                            }
+                                        )
+                                    },
+                            )
+                        }
 
-                            item {
-                                PlayerMenuActionGroup(
-                                    actions =
-                                        buildList {
-                                            add(
-                                                PlayerMenuAction(
-                                                    icon =
+                        item {
+                            PlayerMenuActionGroup(
+                                actions =
+                                    buildList {
+                                        add(
+                                            PlayerMenuAction(
+                                                icon =
+                                                    if (isDownloaded) {
+                                                        MetrolistIcons.Outlined.OfflinePin
+                                                    } else {
+                                                        MetrolistIcons.Outlined.Download
+                                                    },
+                                                title =
+                                                    stringResource(
+                                                        if (isDownloaded) Res.string.remove_download else Res.string.action_download,
+                                                    ),
+                                                onClick = {
+                                                    val song = currentSong?.toSongItem()
+                                                    if (song != null) {
                                                         if (isDownloaded) {
-                                                            MetrolistIcons.Outlined.OfflinePin
+                                                            coroutineScope.launch {
+                                                                val removed = downloadManager.removeDownload(song)
+                                                                Toast
+                                                                    .makeText(
+                                                                        context,
+                                                                        getString(
+                                                                            if (removed) {
+                                                                                Res.string.removed_download
+                                                                            } else {
+                                                                                Res.string.download_not_found
+                                                                            },
+                                                                        ),
+                                                                        Toast.LENGTH_SHORT,
+                                                                    ).show()
+                                                                downloadRefreshKey++
+                                                                onDismiss()
+                                                            }
                                                         } else {
-                                                            MetrolistIcons.Outlined.Download
-                                                        },
-                                                    title =
-                                                        stringResource(
-                                                            if (isDownloaded) Res.string.remove_download else Res.string.action_download,
-                                                        ),
-                                                    onClick = {
-                                                        val song = currentSong?.toSongItem()
-                                                        if (song != null) {
-                                                            if (isDownloaded) {
+                                                            requireDownloadNotifications {
                                                                 coroutineScope.launch {
-                                                                    val removed = downloadManager.removeDownload(song)
+                                                                    val ok = downloadManager.download(song)
                                                                     Toast
                                                                         .makeText(
                                                                             context,
-                                                                            getString(
-                                                                                if (removed) {
-                                                                                    Res.string.removed_download
-                                                                                } else {
-                                                                                    Res.string.download_not_found
-                                                                                },
-                                                                            ),
+                                                                            if (ok) {
+                                                                                getString(
+                                                                                    Res.string.queued_song,
+                                                                                    song.title,
+                                                                                )
+                                                                            } else {
+                                                                                getString(Res.string.could_not_queue_download)
+                                                                            },
                                                                             Toast.LENGTH_SHORT,
                                                                         ).show()
-                                                                    downloadRefreshKey++
-                                                                    onDismiss()
+                                                                    if (ok) downloadRefreshKey++
                                                                 }
-                                                            } else {
-                                                                requireDownloadNotifications {
-                                                                    coroutineScope.launch {
-                                                                        val ok = downloadManager.download(song)
-                                                                        Toast
-                                                                            .makeText(
-                                                                                context,
-                                                                                if (ok) {
-                                                                                    getString(
-                                                                                        Res.string.queued_song,
-                                                                                        song.title,
-                                                                                    )
-                                                                                } else {
-                                                                                    getString(Res.string.could_not_queue_download)
-                                                                                },
-                                                                                Toast.LENGTH_SHORT,
-                                                                            ).show()
-                                                                        if (ok) downloadRefreshKey++
-                                                                    }
-                                                                }
-                                                                onDismiss()
                                                             }
+                                                            onDismiss()
                                                         }
-                                                    },
-                                                ),
-                                            )
-                                            dislikeMenuAction(
-                                                isDisliked,
-                                                onDismiss,
-                                                onDislike = {
-                                                    playerViewModel.toggleDislikeCurrentSong()
-                                                    Toast
-                                                        .makeText(
-                                                            context,
-                                                            if (isDisliked) removedDislikeText else dislikedText,
-                                                            Toast.LENGTH_SHORT,
-                                                        ).show()
-                                                },
-                                            )?.let(::add)
-                                            blockArtistMenuAction(
-                                                onDismiss,
-                                                onBlockArtist =
-                                                    firstArtistId?.let {
-                                                        {
-                                                            playerViewModel.blockCurrentArtist()
-                                                            Toast.makeText(context, blockedArtistText, Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    },
-                                                description = artistName,
-                                            )?.let(::add)
-                                        },
-                                )
-                            }
-
-                            if (Settings.shared.listenTogetherEnabled) {
-                                item {
-                                    PlayerMenuActionGroup(
-                                        actions =
-                                            listOf(
-                                                PlayerMenuAction(
-                                                    icon = MetrolistIcons.Default.Groups,
-                                                    title = stringResource(Res.string.listen_together),
-                                                    onClick = {
-                                                        onDismiss()
-                                                        onNavigateToListenTogether()
-                                                    },
-                                                ),
-                                            ),
-                                    )
-                                }
-                            }
-
-                            item {
-                                PlayerMenuActionGroup(
-                                    actions =
-                                        listOfNotNull(
-                                            equalizerMenuAction(onOpen = {
-                                                if (isTv) {
-                                                    showEqualizer = true
-                                                } else {
-                                                    coroutineScope.launch {
-                                                        if (menuSheetState.hide()) showEqualizer = true
                                                     }
-                                                }
-                                            }),
-                                            tempoPitchMenuAction(Settings.shared.varispeed) { showPlaybackSpeed = true },
-                                        ),
-                                )
-                            }
+                                                },
+                                            ),
+                                        )
+                                        dislikeMenuAction(
+                                            isDisliked,
+                                            onDismiss,
+                                            onDislike = {
+                                                playerViewModel.toggleDislikeCurrentSong()
+                                                Toast
+                                                    .makeText(
+                                                        context,
+                                                        if (isDisliked) removedDislikeText else dislikedText,
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                            },
+                                        )?.let(::add)
+                                        blockArtistMenuAction(
+                                            onDismiss,
+                                            onBlockArtist =
+                                                firstArtistId?.let {
+                                                    {
+                                                        playerViewModel.blockCurrentArtist()
+                                                        Toast.makeText(context, blockedArtistText, Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                            description = artistName,
+                                        )?.let(::add)
+                                    },
+                            )
+                        }
+
+                        item {
+                            PlayerMenuActionGroup(
+                                actions =
+                                    listOfNotNull(
+                                        equalizerMenuAction(onOpen = {
+                                            coroutineScope.launch {
+                                                if (menuSheetState.hide()) showEqualizer = true
+                                            }
+                                        }),
+                                        tempoPitchMenuAction(Settings.shared.varispeed) { showPlaybackSpeed = true },
+                                    ),
+                            )
                         }
                     }
                 }
@@ -604,68 +506,3 @@ private fun PlaybackSpeedPage(
         TempoPitchControls(speed, pitch, onSpeedChange, onPitchChange, speedEnabled, varispeed, onDone = onBack)
     }
 }
-
-@Composable
-private fun VideoResolutionPage(
-    currentHeight: Int?,
-    availableHeights: List<Int>,
-    selectedQuality: MusicVideoQuality,
-    onSelect: (MusicVideoQuality) -> Unit,
-    onBack: () -> Unit,
-) {
-    val selectableQualities =
-        MusicVideoQuality.entries.filter { quality ->
-            quality.targetHeight == null ||
-                quality.targetHeight in availableHeights ||
-                quality.targetHeight == currentHeight
-        }
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onBack, shapes = ButtonDefaults.shapes()) { Text(stringResource(Res.string.back)) }
-                Text(
-                    text = stringResource(Res.string.music_video_resolution),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-        }
-        item {
-            PlayerMenuActionGroup(
-                actions =
-                    selectableQualities.map { quality ->
-                        PlayerMenuAction(
-                            icon = MetrolistIcons.Outlined.Tune,
-                            title = quality.displayName(),
-                            description =
-                                if (
-                                    quality == selectedQuality ||
-                                    (quality.targetHeight != null && quality.targetHeight == currentHeight)
-                                ) {
-                                    stringResource(Res.string.music_video_resolution_current)
-                                } else {
-                                    null
-                                },
-                            onClick = { onSelect(quality) },
-                        )
-                    },
-            )
-        }
-    }
-}
-
-@Composable
-private fun MusicVideoQuality.displayName(): String =
-    when (this) {
-        MusicVideoQuality.AUTO -> stringResource(Res.string.music_video_quality_auto)
-        MusicVideoQuality.P2160 -> "4K (2160p)"
-        else -> stringResource(Res.string.music_video_quality_resolution, name.drop(1))
-    }

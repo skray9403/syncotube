@@ -96,7 +96,7 @@ fun BrowseScreen(
                 scope,
                 onNavigateToBrowse,
                 songs,
-                startVideo = startVideo,
+                startVideo = false,
             )
         },
         onItemLongClick = {

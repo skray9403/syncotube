@@ -46,7 +46,6 @@ import com.metrolist.shared.model.HomeSection
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.YTItem
 import com.metrolist.shared.model.isAvailableOffline
-import com.metrolist.shared.model.isVideoShelf
 import com.metrolist.shared.settings.BlockedContent
 import com.metrolist.shared.ui.icons.MetrolistIcons
 import com.metrolist.shared.ui.screens.BrowseContent
@@ -54,7 +53,6 @@ import com.metrolist.shared.ui.screens.HomeShelfBuilder
 import com.metrolist.shared.ui.screens.homeContentText
 import com.metrolist.shared.ui.screens.pageKey
 import com.metrolist.shared.ui.screens.toHomeSection
-import com.metrolist.shared.ui.tv.tvFocusHighlight
 import com.metrolist.shared.youtube.playback.PlaybackNetworkStateStore
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -146,7 +144,7 @@ fun HomeSectionScreen(
                 scope,
                 onNavigateToBrowse,
                 queue.filter(isItemEnabled),
-                startVideo = visiblePage.sections.any { item in it.items && it.items.isVideoShelf() },
+                startVideo = false,
             )
         },
         onItemLongClick = { selectedMenuItem = it },
@@ -198,7 +196,7 @@ internal fun HomeSectionActions(
         ) {
             Button(
                 onClick = onPlayAll,
-                modifier = Modifier.weight(1f).tvFocusHighlight(),
+                modifier = Modifier.weight(1f),
                 shapes = ButtonDefaults.shapes(),
             ) {
                 Icon(MetrolistIcons.Default.PlayArrow, contentDescription = null)
@@ -207,7 +205,7 @@ internal fun HomeSectionActions(
             }
             FilledTonalButton(
                 onClick = onShuffle,
-                modifier = Modifier.weight(1f).tvFocusHighlight(),
+                modifier = Modifier.weight(1f),
                 shapes = ButtonDefaults.shapes(),
             ) {
                 Icon(MetrolistIcons.Rounded.Shuffle, contentDescription = null)

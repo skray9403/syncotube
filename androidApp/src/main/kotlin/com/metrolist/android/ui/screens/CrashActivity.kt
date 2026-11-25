@@ -187,8 +187,7 @@ class CrashActivity : ComponentActivity() {
             }
             MaterialTheme(colorScheme = colorScheme) {
                 CompositionLocalProvider(
-                    LocalIsTv provides
-                        (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION),
+                    LocalIsTv provides false,
                 ) {
                     var showLogs by remember { mutableStateOf(intent.action == CrashHandler.ACTION_LOGS) }
                     var showUpdate by remember { mutableStateOf(false) }

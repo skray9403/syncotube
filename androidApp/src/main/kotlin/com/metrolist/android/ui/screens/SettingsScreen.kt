@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -29,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -41,20 +39,15 @@ import androidx.lifecycle.viewmodel.compose.rememberViewModelStoreProvider
 import coil3.imageLoader
 import com.metrolist.android.BuildConfig
 import com.metrolist.android.LocalMiniPlayerBottomInset
-import com.metrolist.android.R
 import com.metrolist.android.extensions.findActivity
 import com.metrolist.android.locale.AppLocale
 import com.metrolist.android.locale.rememberAppLanguageChoices
 import com.metrolist.android.playback.AudioCacheManager
 import com.metrolist.android.playback.LocalPlayerConnection
 import com.metrolist.android.playback.PlayerConnection
-import com.metrolist.android.spotifyimport.SpotifyLoginScreen
-import com.metrolist.android.spotifyimport.androidSpotifyImportManager
 import com.metrolist.android.ui.component.rememberMetroEqProfilePicker
 import com.metrolist.android.ui.download.rememberDownloadPermissionGate
-import com.metrolist.android.ui.player.CanvasCache
 import com.metrolist.android.ui.screens.settings.AndroidAboutScreen
-import com.metrolist.android.ui.screens.settings.AndroidAutoScreen
 import com.metrolist.android.ui.screens.settings.BackupRestoreScreen
 import com.metrolist.android.ui.screens.settings.DevtoolsSettingsScreen
 import com.metrolist.android.ui.screens.settings.PlaybackBenchmarkSettingsScreen
@@ -90,7 +83,6 @@ import com.metrolist.shared.generated.resources.device_language
 import com.metrolist.shared.generated.resources.search_history_removal_failed
 import com.metrolist.shared.generated.resources.settings_storage_summary
 import com.metrolist.shared.generated.resources.settings_updates_available_description
-import com.metrolist.shared.generated.resources.spotify_import_error_sign_in_failed
 import com.metrolist.shared.generated.resources.updates_no_updates
 import com.metrolist.shared.settings.FontOption
 import com.metrolist.shared.state.GlobalYouTube
@@ -133,7 +125,6 @@ fun SettingsScreen(
     var currentPage by remember { mutableStateOf<SettingsPageId?>(null) }
     val formatFileSize = rememberFileSizeFormatter()
     val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
     val playerConnection = LocalPlayerConnection.current
     val audioCacheManager: AudioCacheManager = koinInject()
     val homeViewModel: HomeViewModel = koinViewModel()
@@ -312,8 +303,7 @@ fun SettingsScreen(
                     withContext(Dispatchers.IO) {
                         context.imageLoader.diskCache?.size ?: coilDir.calculateDirectorySize()
                     }
-                val animatedCoverCacheSize = withContext(Dispatchers.IO) { CanvasCache.get(context).sizeBytes() }
-                totalCacheSize = songCacheSize + imageCacheSize + downloadSize + animatedCoverCacheSize
+                totalCacheSize = songCacheSize + imageCacheSize + downloadSize
                 freeStorageSize = withContext(Dispatchers.IO) { context.filesDir.usableSpace }
             } finally {
                 isCalculatingCacheSize = false
@@ -334,8 +324,6 @@ fun SettingsScreen(
     val availablePages =
         buildSet {
             add(SettingsPageId.FONTS)
-            add(SettingsPageId.PLAYER_STYLE)
-            add(SettingsPageId.PLAYER_ARTWORK)
             add(SettingsPageId.MINI_PLAYER_STYLE)
             add(SettingsPageId.LYRICS_SOURCES)
             add(SettingsPageId.LYRICS_AI_TRANSLATION)
@@ -356,7 +344,6 @@ fun SettingsScreen(
                 add(SettingsPageId.DEVTOOLS)
                 add(SettingsPageId.PLAYBACK_BENCHMARK)
             }
-            add(SettingsPageId.ANDROID_AUTO)
         }
 
     fun openSupportedLinks() {
@@ -421,6 +408,8 @@ fun SettingsScreen(
                         },
                     availablePages = availablePages,
                     initialPage = initialPage,
+                    supportsMusicVideo = false,
+                    supportsVoiceSearch = false,
                     externalPages = setOf(SettingsPageId.SUPPORTED_LINKS),
                     onPageChanged = { page ->
                         if (page != currentPage) {
@@ -428,17 +417,6 @@ fun SettingsScreen(
                             currentPage = page
                         }
                     },
-                    customPageIcons =
-                        mapOf(
-                            SettingsPageId.ANDROID_AUTO to { tint ->
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_android_auto),
-                                    contentDescription = null,
-                                    tint = tint,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            },
-                        ),
                     hostChoices =
                         mapOf(
                             SettingsHostChoice.CONTENT_LANGUAGE to contentLanguageChoices,
@@ -500,10 +478,6 @@ fun SettingsScreen(
                             LocalViewModelStoreOwner provides rememberViewModelStoreOwner(page, pageViewModels),
                         ) {
                             when (page) {
-                                SettingsPageId.ANDROID_AUTO -> {
-                                    AndroidAutoScreen(onNavigateBack = onBack)
-                                }
-
                                 SettingsPageId.STORAGE -> {
                                     StorageSettingsScreen(onBack, onNavigateToDownloads)
                                 }
@@ -551,9 +525,7 @@ fun SettingsScreen(
                                 playerConnection?.applyAudioPreferences()
                             }
 
-                            SettingsChangeEffect.VIDEO_PLAYBACK -> {
-                                if (value == false) playerConnection?.setVideoMode(false)
-                            }
+                            SettingsChangeEffect.VIDEO_PLAYBACK -> Unit
 
                             SettingsChangeEffect.SENTRY -> {
                                 value?.let(SentryManager::setEnabled)

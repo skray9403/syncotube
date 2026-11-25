@@ -547,7 +547,6 @@ class AudioCacheManager(
                     }
                 }
             }
-            migrateSharedCacheWebm()
             migrateDownloadsToConfiguredLocation()
             storageLock.all {
                 listOf(KIND_CACHE, KIND_DOWNLOAD).forEach { sweepInternalAudio(it) }
@@ -591,80 +590,6 @@ class AudioCacheManager(
                 storageLock.song(candidate.songId) {
                     val entry = database.dao().cachedAudio(candidate.songId)
                     if (entry?.kind == KIND_DOWNLOAD) downloadedArtwork.retain(entry.thumbnailUrl)
-                }
-            }
-        }
-
-    internal suspend fun migrateSharedCacheWebm(export: (File, File, AudioExportMetadata) -> Boolean = ::exportWebmOpus) =
-        withContext(Dispatchers.IO) {
-            database.dao().cachedAudioByLastAccessed(KIND_CACHE).forEach { candidate ->
-                if (candidate.cacheLocation != LOCATION_SHARED_MEDIA || isContentUri(candidate.filePath)) return@forEach
-                val original = File(candidate.filePath)
-                if (!candidate.mimeType
-                        ?.substringBefore(';')
-                        ?.trim()
-                        .equals("audio/webm", ignoreCase = true) &&
-                    !original.extension.equals("webm", ignoreCase = true)
-                ) {
-                    return@forEach
-                }
-                storageLock.song(candidate.songId) {
-                    if (database.dao().cachedAudio(candidate.songId) != candidate || !audioAvailable(candidate.filePath)) return@song
-                    val tempDir = File(context.cacheDir, "cache-export").also(File::mkdirs)
-                    val copiedFile = File.createTempFile("remux-", ".tmp", tempDir)
-                    try {
-                        copyAudioTo(candidate.filePath, copiedFile)
-                        val (source, mimeType) =
-                            prepareStoredAudio(
-                                copiedFile,
-                                "audio/webm",
-                                publicStorage = true,
-                                metadata =
-                                    AudioExportMetadata(
-                                        candidate.title,
-                                        candidate.artist,
-                                        candidate.album,
-                                        downloadedArtwork.exportArtwork(candidate.thumbnailUrl),
-                                    ),
-                                export = export,
-                            )
-                        val size = source.length()
-                        check(size >= MIN_AUDIO_BYTES) { "Remuxed cache audio is too small" }
-                        val format = database.dao().format(candidate.songId).first()
-                        currentCoroutineContext().ensureActive()
-                        withContext(NonCancellable) {
-                            val path =
-                                publishStoredAudio(candidate, {
-                                    moveAudioToDirectory(
-                                        source,
-                                        checkNotNull(original.parentFile),
-                                        "${original.nameWithoutExtension}.opus",
-                                    )
-                                }) { storedPath ->
-                                    database.withDatabaseTransaction {
-                                        database.dao().upsert(candidate.copy(filePath = storedPath, mimeType = mimeType, fileSize = size))
-                                        format?.let {
-                                            database.dao().upsert(
-                                                it.copy(mimeType = checkNotNull(mimeType), contentLength = size),
-                                            )
-                                        }
-                                    }
-                                }
-                            MediaScannerConnection.scanFile(
-                                context,
-                                arrayOf(candidate.filePath, path),
-                                arrayOf(candidate.mimeType, mimeType),
-                                null,
-                            )
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (error: Exception) {
-                        Timber.tag(TAG).w(error, "Failed to remux shared cache songId=%s", candidate.songId)
-                    } finally {
-                        copiedFile.delete()
-                        File(tempDir, "${copiedFile.nameWithoutExtension}.opus.tmp").delete()
-                    }
                 }
             }
         }
@@ -795,20 +720,8 @@ class AudioCacheManager(
                     try {
                         copyAudioTo(entry.filePath, copiedFile)
                         check(copiedFile.length() >= MIN_AUDIO_BYTES) { "Downloaded audio is too small" }
-                        val (sourceFile, mimeType) =
-                            prepareStoredAudio(
-                                copiedFile,
-                                entry.mimeType,
-                                publicStorage = targetShared || targetCustom,
-                                metadata =
-                                    AudioExportMetadata(
-                                        entry.title,
-                                        entry.artist,
-                                        entry.album,
-                                        artwork =
-                                            if (targetShared || targetCustom) downloadedArtwork.exportArtwork(entry.thumbnailUrl) else null,
-                                    ),
-                            )
+                        val sourceFile = copiedFile
+                        val mimeType = entry.mimeType
 
                         val extension = extensionForMimeType(mimeType)
                         val baseName = downloadFileBaseName(entry.artist, entry.title, safeId)
@@ -977,19 +890,8 @@ class AudioCacheManager(
                     throw DownloadTransferException(e)
                 }
 
-            val (sourceFile, storedMimeType) =
-                prepareStoredAudio(
-                    tempFile,
-                    mimeType,
-                    publicStorage = isShared(kind) || isCustom(kind),
-                    metadata =
-                        AudioExportMetadata(
-                            song.title,
-                            song.artists.joinToString(", ") { it.name },
-                            song.album?.name,
-                            artwork = if (isShared(kind) || isCustom(kind)) downloadedArtwork.exportArtwork(song.thumbnail) else null,
-                        ),
-                )
+            val sourceFile = tempFile
+            val storedMimeType = mimeType
 
             currentCoroutineContext().ensureActive()
             control?.awaitIfPaused()

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.media3.common.Player
 import com.metrolist.android.R
 import com.metrolist.android.deviceconnect.AndroidDeviceConnect
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.android.models.PersistPlayerState
 import com.metrolist.android.models.PersistRadioQueueChip
 import com.metrolist.shared.api.PlaylistPage
@@ -61,7 +60,6 @@ internal class AndroidQueueCoordinator(
     private val _shuffleModeEnabled: MutableStateFlow<Boolean>,
     private val onSave: () -> Unit,
     private val onSessionReset: () -> Unit,
-    private val onVideoSelected: (SongItem) -> Unit = {},
     private val castState: () -> CastState = { CastState() },
 ) {
     companion object {
@@ -325,7 +323,7 @@ internal class AndroidQueueCoordinator(
         songsOnly: Boolean = false,
         startPositionMs: Long = 0L,
         startPlaying: Boolean = true,
-        startVideo: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") startVideo: Boolean = false,
         radioQueue: Boolean = false,
     ) {
         val (playableSongs, adjustedStartIndex) =
@@ -353,7 +351,6 @@ internal class AndroidQueueCoordinator(
             return
         }
         replaceQueueSession(playableSongs, adjustedStartIndex, queueTitle, finite ?: true, playlistPage, radioQueue) {
-            if (startVideo && !fromRemote) onVideoSelected(playableSongs[adjustedStartIndex])
             player.setQueue(
                 songs = playableSongs,
                 startIndex = adjustedStartIndex,
@@ -438,7 +435,6 @@ internal class AndroidQueueCoordinator(
                                 GlobalYouTubeRepository.instance.continuePlaylistPage(previous, applyContentFilters = false)
                             }
                         if (!PlaybackNetworkStateStore.current.connected || sessionId != queueSessionId ||
-                            AndroidListenTogetherManager.isGuestPlaybackLocked ||
                             AndroidDeviceConnect.manager.remote.isFollowing
                         ) {
                             return@launch
@@ -521,7 +517,7 @@ internal class AndroidQueueCoordinator(
     ) {
         if (!PlaybackNetworkStateStore.current.connected) return
         if (!canBootstrapRecommendations()) return
-        if (AndroidDeviceConnect.manager.remote.isFollowing || AndroidListenTogetherManager.isGuestPlaybackLocked) return
+        if (AndroidDeviceConnect.manager.remote.isFollowing) return
         val sessionId = queueSessionId
         val requestGeneration = ++recommendationRequestGeneration
         val requestClassic = Settings.shared.classicRecommendations
@@ -550,8 +546,7 @@ internal class AndroidQueueCoordinator(
                             ) && PlaybackNetworkStateStore.current.connected &&
                                 (allowRepeatMode || repeatMode.value == Player.REPEAT_MODE_OFF) &&
                                 canBootstrapRecommendations() &&
-                                !AndroidDeviceConnect.manager.remote.isFollowing &&
-                                !AndroidListenTogetherManager.isGuestPlaybackLocked
+                                !AndroidDeviceConnect.manager.remote.isFollowing
                         },
                         nextContinuation = { currentModeContinuation() },
                         applyPage = { page, initial ->
@@ -622,7 +617,7 @@ internal class AndroidQueueCoordinator(
         shouldBootstrapQueueRecommendations(isFiniteQueue, Settings.shared.autoLoadMore, playlistPage?.hasMore == true)
 
     fun selectQueueChip(chipId: String) {
-        if (AndroidDeviceConnect.manager.remote.isFollowing || AndroidListenTogetherManager.isGuestPlaybackLocked) return
+        if (AndroidDeviceConnect.manager.remote.isFollowing) return
         val chip = queueChipsState.value.firstOrNull { it.id == chipId } ?: return
         if (chip.isSelected) return
         val currentSong = player.currentSong.value ?: return
@@ -681,7 +676,6 @@ internal class AndroidQueueCoordinator(
                 PlaybackNetworkStateStore.current.connected &&
                 (allowRepeatMode || repeatMode.value == Player.REPEAT_MODE_OFF) &&
                 !AndroidDeviceConnect.manager.remote.isFollowing &&
-                !AndroidListenTogetherManager.isGuestPlaybackLocked &&
                 isCurrentRecommendationRequest(
                     expectedSessionId,
                     expectedRequestGeneration,
@@ -959,7 +953,7 @@ internal class AndroidQueueCoordinator(
             (radioQueueExplicitFeed || requestClassic == Settings.shared.classicRecommendations) &&
                 PlaybackNetworkStateStore.current.connected && sessionId == queueSessionId &&
                 repeatMode.value == Player.REPEAT_MODE_OFF && canBootstrapRecommendations() &&
-                !AndroidDeviceConnect.manager.remote.isFollowing && !AndroidListenTogetherManager.isGuestPlaybackLocked
+                !AndroidDeviceConnect.manager.remote.isFollowing
         }, requestClassic = requestClassic) ?: return false
 
         val currentQueue = player.songQueue.value
@@ -999,9 +993,7 @@ internal class AndroidQueueCoordinator(
     }
 
     fun tryStartPreloadedNextAtEof(completedPlaybackInstanceId: Long): Boolean {
-        if (transitions.isCrossfading || AndroidDeviceConnect.manager.remote.isActive ||
-            AndroidListenTogetherManager.isGuestPlaybackLocked
-        ) {
+        if (transitions.isCrossfading || AndroidDeviceConnect.manager.remote.isActive) {
             return false
         }
         if (
@@ -1024,7 +1016,6 @@ internal class AndroidQueueCoordinator(
             AndroidDeviceConnect.manager.remote.playbackEnded()
             return
         }
-        if (AndroidListenTogetherManager.isGuestPlaybackLocked) return
         repeatedQueueIndex(
             repeatMode = repeatMode.value,
             currentIndex = player.currentMediaItemIndex.value,
@@ -1098,7 +1089,7 @@ internal class AndroidQueueCoordinator(
 
         fun isCurrent(): Boolean =
             PlaybackNetworkStateStore.current.connected && shouldCommit() && sessionId == queueSessionId && !isFiniteQueue &&
-                !AndroidDeviceConnect.manager.remote.isFollowing && !AndroidListenTogetherManager.isGuestPlaybackLocked
+                !AndroidDeviceConnect.manager.remote.isFollowing
         recommendationBootstrapJob?.join()
         if (!isCurrent()) return false
         if (player.currentMediaItemIndex.value < player.songQueue.value.lastIndex) return true

@@ -27,7 +27,6 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.metrolist.android.LocalMiniPlayerBottomInset
 import com.metrolist.android.playback.LocalPlayerConnection
 import com.metrolist.android.ui.component.SwipeGestureHandler
-import com.metrolist.android.ui.components.AnimatedCoverVideo
 import com.metrolist.android.ui.components.handleItemClick
 import com.metrolist.android.ui.menu.AlbumMenu
 import com.metrolist.android.ui.menu.ArtistMenu
@@ -52,13 +51,11 @@ import com.metrolist.shared.settings.BlockedContent
 import com.metrolist.shared.settings.Settings
 import com.metrolist.shared.state.GlobalYouTubeRepository
 import com.metrolist.shared.state.SongLikeState
-import com.metrolist.shared.ui.LocalIsTv
 import com.metrolist.shared.ui.components.CollectionPreviews
 import com.metrolist.shared.ui.components.ContainedLoadingIndicator
 import com.metrolist.shared.ui.components.PopupContent
 import com.metrolist.shared.ui.screens.ArtistScreen
 import com.metrolist.shared.utils.ShareUrls
-import com.metrolist.shared.youtube.playback.PlaybackNetworkStateStore
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.androidx.compose.koinViewModel
@@ -91,8 +88,6 @@ fun ArtistScreenHost(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val uiState by viewModel.shared.uiState.collectAsState()
-    val playbackNetwork by PlaybackNetworkStateStore.state.collectAsState()
-    val artworkAllowedOnNetwork = Settings.shared.isAnimatedArtworkAllowedOnNetwork(playbackNetwork)
     val info = uiState.artistInfo
     val sections = uiState.sections
     val sectionBrowseIds = uiState.sectionBrowseIds
@@ -101,32 +96,10 @@ fun ArtistScreenHost(
     var selectedMenuPlaylist by remember { mutableStateOf<PlaylistItem?>(null) }
     var selectedMenuArtist by remember { mutableStateOf<ArtistItem?>(null) }
     var showArtistMenu by remember(artistId) { mutableStateOf(false) }
-    val appleMusicImage = uiState.appleMusicArtworkUrl
-    val showYouTubeImage =
-        !Settings.shared.enableAppleMusicArtistImages ||
-            (uiState.isAppleMusicImageLookupComplete && appleMusicImage == null)
-    val displayArtist =
-        remember(info, appleMusicImage, showYouTubeImage) {
-            info?.copy(
-                banner = appleMusicImage ?: info.banner.takeIf { showYouTubeImage },
-                thumbnail = appleMusicImage ?: info.thumbnail.takeIf { showYouTubeImage },
-            )
-        }
+    val displayArtist = info
 
     val initialArtist = remember(artistId) { CollectionPreviews.artist(artistId) ?: ArtistItem(artistId, "", null) }
     val menuArtist = displayArtist ?: initialArtist
-
-    LaunchedEffect(
-        info?.title,
-        Settings.shared.enableAppleMusicArtistImages,
-        Settings.shared.enableAppleMusicArtistVideos,
-        Settings.shared.appleMusicArtistVideoResolution,
-        Settings.shared.lastResolvedContentCountry,
-        Settings.shared.lastResolvedContentLanguage,
-    ) {
-        viewModel.shared.refreshAppleMusicArtwork()
-        viewModel.shared.refreshLastFmForLanguage()
-    }
 
     val playbackErrorText = stringResource(Res.string.error_occurred)
 
@@ -265,7 +238,7 @@ fun ArtistScreenHost(
                 }
             }
         },
-        onRefreshClick = if (LocalIsTv.current) ::refresh else null,
+        onRefreshClick = null,
         isSubscribed = viewModel.shared.subscription.isSubscribed,
         subscribeSuccessCount = viewModel.shared.subscription.subscribeSuccessCount,
         showSubscribe = true,
@@ -275,13 +248,10 @@ fun ArtistScreenHost(
             }
         },
         onUnblockClick = { displayArtist?.let { BlockedContent.unblockArtist(it.id) } },
-        description = displayArtist?.description?.takeIf(String::isNotBlank) ?: uiState.lastFmBio,
-        aboutImageUrl = uiState.lastFmPhotoUrl ?: info?.thumbnail ?: info?.banner,
+        description = displayArtist?.description?.takeIf(String::isNotBlank),
+        aboutImageUrl = info?.thumbnail ?: info?.banner,
         onAboutClick = { info?.let { onNavigateToAboutArtist(it) } },
-        headerVideoLayer =
-            uiState.appleMusicVideoUrl
-                ?.takeIf { Settings.shared.enableAppleMusicArtistVideos && artworkAllowedOnNetwork }
-                ?.let { url -> { modifier -> AnimatedCoverVideo(url = url, modifier = modifier) } },
+        headerVideoLayer = null,
         contentPadding = PaddingValues(bottom = LocalMiniPlayerBottomInset.current),
         onAppBarVisibleChange = { appBarVisible = it },
         overlay = {

@@ -32,7 +32,6 @@ import androidx.media3.common.util.Util
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.metrolist.android.deviceconnect.toDeviceConnectRepeatMode
-import com.metrolist.android.listentogether.AndroidListenTogetherManager
 import com.metrolist.shared.cast.CastState
 import com.metrolist.shared.cast.castVolumePercent
 import com.metrolist.shared.deviceconnect.DcPlaybackAction
@@ -75,7 +74,7 @@ private fun SongItem.toMediaItem(
 ): MediaItem =
     MediaItem
         .Builder()
-        .setMediaId(queueEntryKey?.takeIf { it >= 0 }?.let { AutomotiveMediaIds.queueSong(it, id) } ?: id)
+        .setMediaId(id)
         .setMediaMetadata(
             MediaMetadata
                 .Builder()
@@ -338,8 +337,8 @@ class MediaSessionPlayer(
     private val musicPlayer: AndroidPlaybackPlayer,
     private val repeatMode: MutableStateFlow<Int>,
     private val shuffleModeEnabled: MutableStateFlow<Boolean> = MutableStateFlow(musicPlayer.isShuffleEnabled),
-    private val isPlaybackLockedProvider: () -> Boolean = { AndroidListenTogetherManager.isGuestPlaybackLocked },
-    private val isPlaybackLockedFlow: StateFlow<Boolean> = AndroidListenTogetherManager.isGuestPlaybackLockedFlow,
+    private val isPlaybackLockedProvider: () -> Boolean = { false },
+    private val isPlaybackLockedFlow: StateFlow<Boolean> = MutableStateFlow(false),
     private val remotePlaybackState: StateFlow<CastState>? = null,
     private val onRemotePlaybackChange: (Boolean) -> Unit = {},
     private val onRemoteStop: () -> Unit = {},
@@ -351,8 +350,6 @@ class MediaSessionPlayer(
     private val mediaItemResolver: (MediaItem) -> SongItem? = { null },
     currentArtworkUri: (String?) -> Uri? = artworkUri,
     currentArtworkAuthority: String? = null,
-    private val automotivePlaybackRequestGate: AutomotivePlaybackRequestGate? = null,
-    private val isAutomotiveSongBlocked: (SongItem) -> Boolean = { it.isUnavailable || BlockedContent.isBlocked(it) },
     private val isDeviceConnectFollowing: () -> Boolean = { false },
     private val deviceConnectInterceptor: (DcPlaybackCommand, MusicQueueSnapshot?) -> Boolean = { _, _ -> false },
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob()),
@@ -639,7 +636,6 @@ class MediaSessionPlayer(
     ) {
         if (isPlaybackLockedProvider()) return
         if (mediaItemIndex !in 0 until mediaItemCount) return
-        automotivePlaybackRequestGate?.cancelPendingRequests()
         val position = positionMs.coerceAtLeast(0L)
         val action = if (mediaItemIndex == getCurrentMediaItemIndex()) DcPlaybackAction.SEEK else DcPlaybackAction.SELECT
         if (interceptDeviceConnect(
@@ -1082,12 +1078,7 @@ class MediaSessionPlayer(
 
     private fun resolveMediaItem(mediaItem: MediaItem): SongItem? {
         val entries = musicPlayer.queueState.value.entries
-        AutomotiveMediaIds.queueSong(mediaItem.mediaId)?.let { queued ->
-            return entries.firstOrNull { it.key == queued.entryKey && it.song.id == queued.songId }?.song
-        }
-        val songId =
-            AutomotiveMediaIds.songId(mediaItem.mediaId)
-                ?: mediaItem.mediaId.takeUnless { it.startsWith("auto:") }
+        val songId = mediaItem.mediaId.takeUnless { it.startsWith("auto:") }
         return songId?.let { id -> entries.firstOrNull { it.song.id == id }?.song } ?: mediaItemResolver(mediaItem)
     }
 
@@ -1098,93 +1089,25 @@ class MediaSessionPlayer(
         return null
     }
 
-    private fun applyQueueSelection(
-        mediaItems: List<MediaItem>,
-        positionMs: Long,
-        selectForAutomotivePlayback: Boolean,
-    ): Boolean {
-        val mediaId = mediaItems.singleOrNull()?.mediaId ?: return false
-        val queueState = musicPlayer.queueState.value
-        val selectedIndex = automotiveQueueIndex(mediaId, queueState.entries) ?: return false
-        if (selectForAutomotivePlayback || selectedIndex != queueState.currentIndex) {
-            seekTo(selectedIndex, positionMs)
-            return true
-        }
-        if (musicPlayer.currentPosition.value != positionMs) seekTo(positionMs)
-        musicPlayer.resume()
-        return true
-    }
-
-    private fun reorderExistingQueue(mediaItems: List<MediaItem>): Boolean {
-        val requested = mediaItems.map { AutomotiveMediaIds.queueSong(it.mediaId) ?: return false }
-        val entries = musicPlayer.queueState.value.entries
-        if (requested.size != entries.size || requested.map { it.entryKey }.toSet() != entries.map { it.key }.toSet()) return false
-        val entriesByKey = entries.associateBy(MusicQueueEntry::key)
-        if (requested.any { entriesByKey[it.entryKey]?.song?.id != it.songId }) return false
-        // shortcut: Moves use indexes; use keyed batches if large Auto queues make reordering slow.
-        requested.forEachIndexed { targetIndex, item ->
-            val currentIndex =
-                musicPlayer.queueState.value.entries
-                    .indexOfFirst { it.key == item.entryKey }
-            if (currentIndex != targetIndex) musicPlayer.moveQueueItem(currentIndex, targetIndex)
-        }
-        return true
-    }
-
     private fun setResolvedMediaItems(
-        mediaItems: List<MediaItem>,
         songs: List<SongItem>,
         startIndex: Int,
         startPositionMs: Long,
-        automotiveSelection: AutomotiveMediaItemsApplication.Apply?,
     ) {
-        val playableIndices =
-            if (automotiveSelection == null) songs.indices.toList() else songs.indices.filterNot { isAutomotiveSongBlocked(songs[it]) }
-        val playableStartIndex = playableIndices.indexOf(startIndex)
-        if (automotiveSelection != null && playableStartIndex < 0) return
-        val playableMediaItems = if (automotiveSelection == null) mediaItems else playableIndices.map(mediaItems::get)
-        val playableSongs = if (automotiveSelection == null) songs else playableIndices.map(songs::get)
-        if (playableSongs.isEmpty()) {
+        if (songs.isEmpty()) {
             clearMediaItems()
             return
         }
-        val appliedStartIndex =
-            if (automotiveSelection?.shuffleModeEnabled == true) {
-                playableSongs.indices.random()
-            } else if (automotiveSelection == null) {
-                startIndex
-            } else {
-                playableStartIndex
-            }
-        if (applyQueueSelection(playableMediaItems, startPositionMs, automotiveSelection != null)) return
-        val stateBeforeReorder = musicPlayer.queueState.value
-        if (reorderExistingQueue(playableMediaItems)) {
-            if (musicPlayer.queueState.value != stateBeforeReorder) onQueueChanged(false)
-            if (musicPlayer.currentMediaItemIndex.value != appliedStartIndex) {
-                musicPlayer.skipToQueueItem(appliedStartIndex, startPositionMs)
-            } else {
-                if (musicPlayer.currentPosition.value != startPositionMs) seekTo(startPositionMs)
-                musicPlayer.resume()
-            }
-            return
-        }
-        val replaceQueue = {
-            val previousState = musicPlayer.queueState.value
-            musicPlayer.setQueue(
-                songs = playableSongs,
-                startIndex = appliedStartIndex,
-                startPlaying = true,
-                startPositionMs = startPositionMs,
-                preparePlayback = true,
-            )
-            if (automotiveSelection?.replacesQueue != true && musicPlayer.queueState.value != previousState) {
-                onQueueChanged(true)
-            }
-        }
-        if (automotiveSelection?.replacesQueue == true) {
-            automotivePlaybackRequestGate?.replaceQueue(automotiveSelection, playableSongs, appliedStartIndex, replaceQueue)
-        } else {
-            replaceQueue()
+        val previousState = musicPlayer.queueState.value
+        musicPlayer.setQueue(
+            songs = songs,
+            startIndex = startIndex,
+            startPlaying = true,
+            startPositionMs = startPositionMs,
+            preparePlayback = true,
+        )
+        if (musicPlayer.queueState.value != previousState) {
+            onQueueChanged(true)
         }
     }
 
@@ -1208,7 +1131,7 @@ class MediaSessionPlayer(
         mediaItems: MutableList<MediaItem>,
     ) {
         if (isPlaybackLockedProvider()) return
-        resolveMediaItems(mediaItems)?.filterNot(isAutomotiveSongBlocked)?.takeIf { it.isNotEmpty() }?.let { songs ->
+        resolveMediaItems(mediaItems)?.takeIf { it.isNotEmpty() }?.let { songs ->
             mutateQueueItems(replacesQueue = musicPlayer.currentSong.value == null) { insertResolvedMediaItems(index, songs) }
         }
     }
@@ -1343,12 +1266,8 @@ class MediaSessionPlayer(
         val retainPosition = !resetPosition && currentIndex in mediaItems.indices
         val startIndex = currentIndex.takeIf { retainPosition } ?: 0
         val startPositionMs = getCurrentPosition().coerceAtLeast(0L).takeIf { retainPosition } ?: 0L
-        val automotiveApplication = automotivePlaybackRequestGate?.consume(mediaItems, startIndex, startPositionMs)
-        if (automotiveApplication == AutomotiveMediaItemsApplication.Reject) return
-        val automotiveSelection = automotiveApplication as? AutomotiveMediaItemsApplication.Apply
-        val resolvedMediaItems = automotiveSelection?.mediaItems ?: mediaItems
-        val songs = resolveMediaItems(resolvedMediaItems) ?: return
-        setResolvedMediaItems(resolvedMediaItems, songs, startIndex, startPositionMs, automotiveSelection)
+        val songs = resolveMediaItems(mediaItems) ?: return
+        setResolvedMediaItems(songs, startIndex, startPositionMs)
     }
 
     override fun setMediaItems(
@@ -1362,15 +1281,11 @@ class MediaSessionPlayer(
             return
         }
         val positionMs = startPositionMs.takeUnless { it == C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
-        val automotiveApplication = automotivePlaybackRequestGate?.consume(mediaItems, startIndex, positionMs)
-        if (automotiveApplication == AutomotiveMediaItemsApplication.Reject) return
-        val automotiveSelection = automotiveApplication as? AutomotiveMediaItemsApplication.Apply
-        val resolvedMediaItems = automotiveSelection?.mediaItems ?: mediaItems
-        val songs = resolveMediaItems(resolvedMediaItems) ?: return
+        val songs = resolveMediaItems(mediaItems) ?: return
         if (songs.isNotEmpty() && startIndex !in songs.indices) {
             throw IllegalSeekPositionException(Timeline.EMPTY, startIndex, startPositionMs)
         }
-        setResolvedMediaItems(resolvedMediaItems, songs, startIndex, positionMs, automotiveSelection)
+        setResolvedMediaItems(songs, startIndex, positionMs)
     }
 
     override fun replaceMediaItem(
