@@ -138,19 +138,24 @@ class SearchViewModel(
                 query = query,
                 isQuerySubmitted = true,
                 isSearching = true,
+                hasSearched = true,
                 searchFailed = false,
                 searchSuggestions = null,
                 searchSummary = null,
                 unfilteredSearchSummary = null,
-                selectedFilter = null,
+                selectedFilter = SearchFilter.SONG,
                 unfilteredResults = null,
                 filteredResults = null,
             )
         }
-        search(recordSearchHistory = !Settings.shared.pauseSearchHistory)
+        searchFiltered(SearchFilter.SONG)
     }
 
     fun search(recordSearchHistory: Boolean = false) {
+        _uiState.value.selectedFilter?.let { filter ->
+            searchFiltered(filter)
+            return
+        }
         val currentQuery = _uiState.value.query
         if (currentQuery.isEmpty()) return
         if (recordSearchHistory) addSearchHistory(currentQuery)
