@@ -10,6 +10,7 @@ import com.metrolist.android.deviceconnect.toPlayerRepeatMode
 import com.metrolist.android.nectarcast.NectarCastRegistry
 import com.metrolist.shared.deviceconnect.DcLocalPlaybackState
 import com.metrolist.shared.deviceconnect.DcPlaybackSnapshot
+import com.metrolist.shared.deviceconnect.DcScrobbleSession
 import com.metrolist.shared.deviceconnect.DeviceConnectPlaybackPort
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.playback_unable_to_play_queued_track

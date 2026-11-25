@@ -63,6 +63,7 @@ import com.metrolist.android.widget.WidgetControls
 import com.metrolist.android.widget.sampleWidgetProgress
 import com.metrolist.android.widget.shouldSampleWidgetProgress
 import com.metrolist.android.widget.widgetScreenInteractive
+import com.metrolist.innertubex.extraction.StreamResolveException
 import com.metrolist.innertubex.extraction.TokenProvider
 import com.metrolist.innertubex.sabr.findSabrProtocolException
 import com.metrolist.shared.BuildConfig
@@ -120,7 +121,6 @@ import com.metrolist.shared.youtube.playback.PlaybackEventKind
 import com.metrolist.shared.youtube.playback.PlaybackEventLog
 import com.metrolist.shared.youtube.playback.PlaybackNetworkStateStore
 import com.metrolist.shared.youtube.playback.PlaybackResource
-import com.metrolist.shared.youtube.playback.StreamResolveException
 import com.metrolist.shared.youtube.playback.StreamResolver
 import com.metrolist.shared.youtube.playback.matchingLiveState
 import com.metrolist.shared.youtube.playback.playbackErrorResource
@@ -161,11 +161,69 @@ import java.io.IOException
 import java.net.InetAddress
 import java.util.concurrent.TimeoutException
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
+import android.provider.Settings as AndroidSettings
 import com.metrolist.shared.generated.resources.Res as SharedRes
 import com.metrolist.shared.generated.resources.shuffle as sharedShuffle
 import com.metrolist.shared.generated.resources.start_radio as sharedStartRadio
 
 private const val QUEUE_RESOLVE_RETRY_DELAY_MS = 350L
+
+internal suspend fun observeAndroidScrobbles(
+    player: AndroidPlaybackPlayer,
+    onState: (SongItem?, Boolean, Boolean) -> Unit,
+) {
+    var previousInstance = player.currentPlaybackInstanceId
+    var previousQueueKey = player.queueState.value.let { it.entries.getOrNull(it.currentIndex)?.key }
+    var previousQueueIndex = player.queueState.value.currentIndex
+    var previousRequestId =
+        player.queuePlaybackRequests.replayCache
+            .lastOrNull()
+            ?.requestId
+    merge(
+        combine(
+            player.currentSong,
+            player.isPlaying,
+            player.queueState,
+            player.playbackInstanceId,
+            player.duration,
+        ) { _, _, _, _, _ -> Unit },
+        player.queuePlaybackRequests.map { Unit },
+    ).map {
+        val queue = player.queueState.value
+        val queueKey = queue.entries.getOrNull(queue.currentIndex)?.key
+        Triple(
+            player.currentSong.value?.let { song ->
+                val duration =
+                    player.duration.value
+                        .takeIf { it > 0L }
+                        ?.div(1000L)
+                        ?.takeIf { it > 0L }
+                if (!song.isLive && song.duration?.takeIf { it > 0L } == null && duration != null) song.copy(duration = duration) else song
+            } to player.isPlaying.value,
+            Triple(queueKey, queue.currentIndex, player.currentPlaybackInstanceId),
+            player.queuePlaybackRequests.replayCache
+                .lastOrNull()
+                ?.requestId,
+        )
+    }.distinctUntilChanged()
+        .collect { (songAndPlaying, queueAndInstance, requestId) ->
+            val (song, playing) = songAndPlaying
+            val (queueKey, queueIndex, instance) = queueAndInstance
+            val queueOccurrenceChanged = queueIndex != previousQueueIndex && queueKey != previousQueueKey
+            val newPlayback = requestId != previousRequestId || (queueOccurrenceChanged && instance != previousInstance)
+            onState(song, playing, newPlayback)
+            // Queue and instance flows may arrive in either order; retain the old occurrence until both change.
+            if (!queueOccurrenceChanged || newPlayback) {
+                if (queueKey != previousQueueKey || queueIndex != previousQueueIndex || requestId != previousRequestId) {
+                    previousInstance = instance
+                }
+                previousQueueKey = queueKey
+                previousQueueIndex = queueIndex
+            }
+            previousRequestId = requestId
+        }
+}
 
 class MusicService :
     MediaSessionService(),
@@ -760,6 +818,8 @@ class MusicService :
             restoreLocalPlaybackAfterCast(remoteState.positionMs, remoteState.isPlaying)
         }
     }
+
+    private fun shouldPauseLocalPlaybackInBackground(): Boolean = false
 
     private fun restoreLocalPlaybackAfterCast(
         positionMs: Long,
@@ -2532,6 +2592,11 @@ class MusicService :
 
     private suspend fun extendRadioQueue(shouldCommit: () -> Boolean): Boolean = queueCoordinator.extendRadioQueue(shouldCommit)
 
+    private suspend fun <T> withQueueLoading(
+        isPlaybackLoading: Boolean = false,
+        block: suspend () -> T,
+    ): T = queueCoordinator.withQueueLoading(isPlaybackLoading, block)
+
     private suspend fun fetchPlaybackResource(
         song: SongItem,
         @Suppress("UNUSED_PARAMETER") wantVideo: Boolean = false,
@@ -2760,3 +2825,21 @@ internal fun shouldAdvanceAfterPlaybackFailure(
         category = category,
         originalCategory = originalCategory,
     )
+
+internal fun nextMediaSessionRepeatMode(mode: Int): Int =
+    when (mode) {
+        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+        else -> Player.REPEAT_MODE_OFF
+    }
+
+internal suspend fun nextOfflineQueueIndex(
+    songs: List<SongItem>,
+    currentIndex: Int,
+    repeatAll: Boolean,
+    isPlayable: suspend (SongItem) -> Boolean,
+): Int? {
+    if (currentIndex !in songs.indices) return null
+    val indices = (currentIndex + 1 until songs.size) + if (repeatAll) (0 until currentIndex).toList() else emptyList()
+    return indices.firstOrNull { isPlayable(songs[it]) }
+}

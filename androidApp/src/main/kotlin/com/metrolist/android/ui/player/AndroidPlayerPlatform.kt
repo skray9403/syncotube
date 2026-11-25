@@ -3,6 +3,7 @@ package com.metrolist.android.ui.player
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.view.accessibility.AccessibilityManager
@@ -169,21 +170,18 @@ class AndroidPlayerPlatform(
         lockLandscape: Boolean,
         lightStatusBars: Boolean?,
     ) {
-        val isTv = LocalIsTv.current
         val hostView = LocalView.current
         LifecycleResumeEffect(hostView, lightStatusBars) {
             SystemBarAppearance.playerLightStatusBars = lightStatusBars
             onPauseOrDispose { SystemBarAppearance.playerLightStatusBars = null }
         }
-        LaunchedEffect(lockLandscape, isTv) {
-            if (!isTv) {
-                activity?.requestedOrientation =
-                    if (lockLandscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
+        LaunchedEffect(lockLandscape) {
+            activity?.requestedOrientation =
+                if (lockLandscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
-        DisposableEffect(isTv) {
+        DisposableEffect(Unit) {
             onDispose {
-                if (!isTv) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
         }
         DisposableEffect(hostView, hideSystemBars) {

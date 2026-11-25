@@ -263,6 +263,11 @@ fun StorageSettingsScreen(
         label = "imageCacheProgress",
     )
 
+    suspend fun readSongCacheSize(): Long =
+        withContext(Dispatchers.IO) {
+            audioCacheManager.getCacheSizeBytes()
+        }
+
     suspend fun readImageCacheSize(): Long =
         withContext(Dispatchers.IO) {
             imageDiskCache?.size ?: coilDir.calculateDirectorySize()

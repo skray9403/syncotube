@@ -134,7 +134,7 @@ class NectarCastAdvertiser(
             AdvertiseSettings
                 .Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
-                .setTxPowerLevel(AdvertiseSettings.TX_POWER_LOW)
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_LOW)
                 .setConnectable(false)
                 .build()
 
