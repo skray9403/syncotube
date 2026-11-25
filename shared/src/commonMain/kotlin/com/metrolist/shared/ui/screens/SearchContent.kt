@@ -115,7 +115,6 @@ import com.metrolist.shared.model.SearchSummary
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.YTItem
 import com.metrolist.shared.model.displayThumbnailUrl
-import com.metrolist.shared.model.filterAvailableSearchFilters
 import com.metrolist.shared.model.isVideoShelf
 import com.metrolist.shared.model.thumbnailAspectRatio
 import com.metrolist.shared.settings.ArtistNameAliases
