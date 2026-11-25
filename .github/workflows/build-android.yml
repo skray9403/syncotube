@@ -1,4 +1,5 @@
 name: Build Android
+# Build and publish the minimal Android client artifact.
 
 on:
   pull_request:
@@ -14,7 +15,7 @@ on:
         default: release
 
 concurrency:
-  # Dispatched APK builds get their own group so pushes to main cannot cancel them.
+  # Keep the minimal-client APK build isolated from unrelated repository builds.
   group: android-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 

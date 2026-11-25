@@ -250,21 +250,9 @@ fun MetrolistNavigationScaffold(
     )
 }
 
-private fun floatingNavigationItems(): List<Screen> =
-    buildList {
-        if (Settings.shared.showBottomNavHome) add(Screen.Home)
-        if (Settings.shared.showBottomNavLibrary) add(Screen.Library)
-        if (Settings.shared.showBottomNavSearch) add(Screen.Search)
-        if (isEmpty()) add(Screen.EasterEgg)
-    }
+private fun floatingNavigationItems(): List<Screen> = listOf(Screen.Search)
 
-private fun visibleNavigationItems(): List<Screen> =
-    buildList {
-        if (Settings.shared.showBottomNavHome) add(Screen.Home)
-        if (Settings.shared.showBottomNavSearch) add(Screen.Search)
-        if (Settings.shared.showBottomNavLibrary) add(Screen.Library)
-        if (isEmpty()) add(Screen.EasterEgg)
-    }
+private fun visibleNavigationItems(): List<Screen> = listOf(Screen.Search)
 
 private fun Modifier.navigationLongPress(
     onLongPress: () -> Unit,

@@ -486,13 +486,13 @@ fun MetrolistApp(
             onRejectPairing = AndroidDeviceConnect.manager::rejectPairing,
         )
         val initialStartRoute = remember { resolveAndPersistStartupScreen() }
-        val topLevelRoutes = remember { setOf(Screen.Home, Screen.Search, Screen.Library, Screen.EasterEgg) }
+        val topLevelRoutes = remember { setOf(Screen.Search) }
         val navigationState =
             key(navigationSaveKey) {
                 rememberNavigationState(
                     startRoute = initialStartRoute,
                     topLevelRoutes = topLevelRoutes,
-                    initialDestination = remember { defaultOpenTabScreen(Settings.shared.defaultOpenTab) },
+                    initialDestination = remember { Screen.Search },
                 )
             }
 
@@ -2457,29 +2457,11 @@ fun Intent.widgetTargetDestination(): IncomingDestination? {
 fun String.sanitizeRoomCode(): String = filter { it.isLetterOrDigit() }.uppercase().take(8)
 
 fun resolveAndPersistStartupScreen(): Screen {
-    val default =
-        when {
-            Settings.shared.defaultOpenTab == "MYSTERIOUS" -> {
-                Screen.EasterEgg
-            }
-
-            else -> {
-                when (defaultOpenTabRoot(Settings.shared.defaultOpenTab)) {
-                    "SEARCH" -> Screen.Search
-                    "LIBRARY" -> Screen.Library
-                    else -> Screen.Home
-                }
-            }
-        }
     Settings.shared.isExpanded = false
-    return default
+    return Screen.Search
 }
 
-fun NavKey.isVisibleNavigationScreen(): Boolean =
-    when (this) {
-        Screen.Home, Screen.Search, Screen.Library, Screen.EasterEgg -> true
-        else -> false
-    }
+fun NavKey.isVisibleNavigationScreen(): Boolean = this == Screen.Search
 
 fun getEntryProvider(
     navigator: Navigator,

@@ -115,7 +115,6 @@ import com.metrolist.shared.model.SearchSummary
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.YTItem
 import com.metrolist.shared.model.displayThumbnailUrl
-import com.metrolist.shared.model.filterAvailableSearchFilters
 import com.metrolist.shared.model.isVideoShelf
 import com.metrolist.shared.model.thumbnailAspectRatio
 import com.metrolist.shared.settings.ArtistNameAliases
@@ -1030,12 +1029,10 @@ private fun SearchResultsList(
                 Box(Modifier.widthIn(max = 1400.dp).fillMaxWidth()) {
                     ChipShelf(
                         options =
-                            SearchFilter.entries.toList().filterAvailableSearchFilters(
-                                hideVideoSongs = Settings.shared.hideVideoSongs,
-                                hidePodcasts = Settings.shared.hidePodcasts,
-                            ),
-                        selectedOption = selectedFilter,
-                        onSelectionChange = onFilterSelected,
+                            listOf(SearchFilter.SONG),
+                        selectedOption = SearchFilter.SONG,
+                        onSelectionChange = { onFilterSelected(SearchFilter.SONG) },
+                        selectionRequired = true,
                         label = { filter ->
                             when (filter) {
                                 SearchFilter.SONG -> text.filterSongs
@@ -1049,7 +1046,6 @@ private fun SearchResultsList(
                                 SearchFilter.PROFILE -> text.filterProfiles
                             }
                         },
-                        allLabel = text.filterAll,
                     )
                 }
             }
