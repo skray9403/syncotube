@@ -1,6 +1,10 @@
 name: Build Android
 
 on:
+  pull_request:
+    branches: [android-only]
+  push:
+    branches: [minimal-youtube-lyrics]
   workflow_dispatch:
     inputs:
       variant:
@@ -22,7 +26,7 @@ jobs:
       contents: read
     with:
       variant: ${{ inputs.variant || 'debug' }}
-      upload-artifact: ${{ github.event_name == 'workflow_dispatch' }}
+      upload-artifact: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event_name == 'push' }}
       require-signing: ${{ inputs.variant == 'release' }}
       cache-read-only: ${{ github.event_name == 'pull_request' }}
     secrets:
