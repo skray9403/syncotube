@@ -530,7 +530,7 @@ private fun BrinkPlayerScreen(
                                 onCheckedChange = { onDismiss() },
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
-                                colors = ToggleButtonDefaults.toggleButtonColors(
+                                colors = ToggleButtonDefaults.colors(
                                     containerColor = colors.primaryContainer,
                                     contentColor = colors.onPrimaryContainer,
                                 ),
@@ -559,7 +559,7 @@ private fun BrinkPlayerScreen(
                                 onCheckedChange = { onUpNext() },
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                                colors = ToggleButtonDefaults.toggleButtonColors(
+                                colors = ToggleButtonDefaults.colors(
                                     containerColor = colors.primaryContainer,
                                     contentColor = colors.onPrimaryContainer,
                                 ),
@@ -588,7 +588,7 @@ private fun BrinkPlayerScreen(
                                 onCheckedChange = { onUpNext() },
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
-                                colors = ToggleButtonDefaults.toggleButtonColors(
+                                colors = ToggleButtonDefaults.colors(
                                     containerColor = colors.primaryContainer,
                                     contentColor = colors.onPrimaryContainer,
                                 ),
@@ -617,7 +617,7 @@ private fun BrinkPlayerScreen(
                                 onCheckedChange = { onUpNext() },
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
-                                colors = ToggleButtonDefaults.toggleButtonColors(
+                                colors = ToggleButtonDefaults.colors(
                                     containerColor = colors.primaryContainer,
                                     contentColor = colors.onPrimaryContainer,
                                 ),
@@ -1220,7 +1220,7 @@ private fun ConnectedIconActionGroup(
                         checked = action.checked,
                         onCheckedChange = { action.onClick() },
                         shapes = shapes,
-                        colors = ToggleButtonDefaults.toggleButtonColors(
+                        colors = ToggleButtonDefaults.colors(
                             containerColor = containerColor,
                             contentColor = contentColor,
                             checkedContainerColor = checkedContainerColor,
