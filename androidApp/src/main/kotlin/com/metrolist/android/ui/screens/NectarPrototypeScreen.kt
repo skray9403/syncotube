@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,14 +61,18 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -77,8 +83,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import com.metrolist.android.extensions.findActivity
 import com.metrolist.shared.ui.icons.MetrolistIcons
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private data class NectarDemoTrack(
     val title: String,
@@ -158,6 +167,16 @@ private val nectarDemoPeers =
  */
 @Composable
 fun NectarPrototypeScreen(initialTab: String = "home") {
+    val context = LocalContext.current
+    val view = LocalView.current
+    SideEffect {
+        context.findActivity()?.window?.let { window ->
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = true
+                isAppearanceLightNavigationBars = true
+            }
+        }
+    }
     val nectarColors =
         remember {
             lightColorScheme(
@@ -210,6 +229,8 @@ private fun NectarPrototypeContent(initialTab: String) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchFilter by rememberSaveable { mutableStateOf("Songs") }
     var libraryFilter by rememberSaveable { mutableStateOf("Playlists") }
+    var isRescanning by rememberSaveable { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
     val likedTrackIndexes = remember { mutableStateListOf(0, 2) }
 
     val track = nectarDemoTracks[trackIndex]
@@ -394,6 +415,16 @@ private fun NectarPrototypeContent(initialTab: String) {
             ) {
                 NectarCastSheet(
                     activePeerIndex = activePeerIndex,
+                    isRescanning = isRescanning,
+                    onRescan = {
+                        if (!isRescanning) {
+                            coroutineScope.launch {
+                                isRescanning = true
+                                delay(550)
+                                isRescanning = false
+                            }
+                        }
+                    },
                     onConnect = { index ->
                         activePeerIndex = index
                         isPlaying = true
@@ -688,7 +719,7 @@ private fun NectarSettingsGroup(content: @Composable () -> Unit) {
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(content = content)
+        Column { content() }
     }
 }
 
@@ -918,6 +949,10 @@ private fun NectarFullPlayer(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val lyricsListState = rememberLazyListState()
+    LaunchedEffect(currentLyricIndex, lyricsMode) {
+        if (lyricsMode) lyricsListState.animateScrollToItem(currentLyricIndex)
+    }
     Column(
         modifier =
             Modifier
@@ -955,6 +990,7 @@ private fun NectarFullPlayer(
         AnimatedContent(targetState = lyricsMode, modifier = Modifier.weight(1f).fillMaxWidth(), label = "player-content") { showLyrics ->
             if (showLyrics) {
                 LazyColumn(
+                    state = lyricsListState,
                     modifier =
                         Modifier
                             .fillMaxSize()
@@ -1074,6 +1110,8 @@ private fun NectarFullPlayer(
 @Composable
 private fun NectarCastSheet(
     activePeerIndex: Int,
+    isRescanning: Boolean,
+    onRescan: () -> Unit,
     onConnect: (Int) -> Unit,
     onReturnToPhone: () -> Unit,
 ) {
@@ -1086,7 +1124,7 @@ private fun NectarCastSheet(
                 Text("Connect to a device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("Wi-Fi, Bluetooth & NectarLink deduplicated", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = {}) { Text("Rescan") }
+            TextButton(onClick = onRescan) { Text(if (isRescanning) "Scanning…" else "Rescan") }
         }
 
         if (activePeerIndex >= 0) {
