@@ -379,7 +379,7 @@ private fun PodcastHeader(
     val title: @Composable () -> Unit = {
         Text(
             page.podcast.title,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
@@ -457,20 +457,18 @@ private fun PodcastHeader(
             }
         }
     }
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
         if (maxWidth < 620.dp) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PodcastArtwork(page, Modifier.size(96.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { title() }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                PodcastArtwork(page, Modifier.fillMaxWidth().aspectRatio(1.34f))
+                title()
                 description()
                 actions()
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                PodcastArtwork(page, Modifier.size(160.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                PodcastArtwork(page, Modifier.size(210.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     title()
                     description()
                     actions()
@@ -489,7 +487,7 @@ private fun PodcastArtwork(
         url = page.podcast.thumbnail,
         contentDescription = null,
         contentScale = ContentScale.Crop,
-        modifier = modifier.clip(RoundedCornerShape(uiEnhanced(8.dp, 16.dp))),
+        modifier = modifier.clip(RoundedCornerShape(uiEnhanced(8.dp, 30.dp))),
     )
 }
 
