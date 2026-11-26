@@ -4,7 +4,7 @@
         <activity
             android:name="com.metrolist.android.ui.nectar.NectarPreviewActivity"
             android:exported="true"
-            android:label="Nectar UI Preview"
+            android:label="Podcast UI Preview"
             android:theme="@style/Theme.Metrolist.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
