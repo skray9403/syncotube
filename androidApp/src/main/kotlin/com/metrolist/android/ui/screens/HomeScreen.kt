@@ -19,20 +19,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -52,14 +59,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,9 +88,13 @@ import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.error_occurred
 import com.metrolist.shared.generated.resources.home_load_failed
 import com.metrolist.shared.generated.resources.home_offline_empty
+import com.metrolist.shared.generated.resources.keep_listening
 import com.metrolist.shared.generated.resources.no_playable_items
+import com.metrolist.shared.generated.resources.pause
+import com.metrolist.shared.generated.resources.play
 import com.metrolist.shared.generated.resources.pin_to_speed_dial
 import com.metrolist.shared.generated.resources.player_not_ready
+import com.metrolist.shared.generated.resources.quick_picks
 import com.metrolist.shared.generated.resources.shuffle
 import com.metrolist.shared.generated.resources.try_again
 import com.metrolist.shared.generated.resources.unpin_from_speed_dial
@@ -93,6 +107,7 @@ import com.metrolist.shared.ui.components.ChipShelf
 import com.metrolist.shared.ui.components.HomeLoadingPlaceholder
 import com.metrolist.shared.ui.components.PopupVisibility
 import com.metrolist.shared.ui.components.RefreshIndicator
+import com.metrolist.shared.ui.components.images.AsyncImage
 import com.metrolist.shared.ui.icons.MetrolistIcons
 import com.metrolist.shared.ui.navigation.LocalRootContentActive
 import com.metrolist.shared.ui.screens.HomeContent
@@ -304,6 +319,55 @@ fun HomeScreen(
                     }
 
                     else -> {
+                        val featuredSong =
+                            currentSong.value
+                                ?: uiState.keepListening.firstOrNull(isHomeItemEnabled)
+                                ?: uiState.quickPicks.firstOrNull(isHomeItemEnabled)
+                        if (featuredSong != null) {
+                            item(key = "featured_listening") {
+                                BoxWithConstraints(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                                ) {
+                                    val quickPickPreview =
+                                        uiState.quickPicks
+                                            .filter { it.id != featuredSong.id && isHomeItemEnabled(it) }
+                                            .take(3)
+                                    if (maxWidth >= 800.dp && quickPickPreview.isNotEmpty()) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                            FeaturedListeningCard(
+                                                song = featuredSong,
+                                                isPlaying = featuredSong.id == currentSong.value?.id && isPlaying.value,
+                                                onPlay = {
+                                                    if (featuredSong.id == currentSong.value?.id) {
+                                                        playerConnection?.togglePlayPause()
+                                                    } else {
+                                                        playSong(featuredSong, playerConnection, scope)
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1.35f),
+                                            )
+                                            QuickPickPreview(
+                                                songs = quickPickPreview,
+                                                onSelect = { playSong(it, playerConnection, scope) },
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                    } else {
+                                        FeaturedListeningCard(
+                                            song = featuredSong,
+                                            isPlaying = featuredSong.id == currentSong.value?.id && isPlaying.value,
+                                            onPlay = {
+                                                if (featuredSong.id == currentSong.value?.id) {
+                                                    playerConnection?.togglePlayPause()
+                                                } else {
+                                                    playSong(featuredSong, playerConnection, scope)
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         item {
                             ChipShelf(
                                 options = uiState.chips,
@@ -391,6 +455,138 @@ fun HomeScreen(
             onDismiss = { showSpeedDialSurpriseMenu = false },
             onSetPinned = viewModel.shared::setSpeedDialSurprisePinned,
         )
+    }
+}
+
+@Composable
+private fun FeaturedListeningCard(
+    song: SongItem,
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        tonalElevation = 2.dp,
+    ) {
+        BoxWithConstraints {
+            val artworkSize = if (maxWidth < 360.dp) 88.dp else 104.dp
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                AsyncImage(
+                    url = song.thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(artworkSize).clip(MaterialTheme.shapes.large),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(Res.string.keep_listening),
+                        style = MaterialTheme.typography.labelLargeEmphasized,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.headlineSmallEmphasized,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = song.artists.joinToString { it.name }.ifBlank { song.album?.name.orEmpty() },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    FilledTonalButton(
+                        onClick = onPlay,
+                        shapes = ButtonDefaults.shapesFor(40.dp),
+                        contentPadding = ButtonDefaults.contentPaddingFor(40.dp),
+                    ) {
+                        Icon(
+                            if (isPlaying) MetrolistIcons.Rounded.Pause else MetrolistIcons.Rounded.PlayArrow,
+                            contentDescription = null,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(if (isPlaying) Res.string.pause else Res.string.play))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickPickPreview(
+    songs: List<SongItem>,
+    onSelect: (SongItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.quick_picks),
+                style = MaterialTheme.typography.titleLargeEmphasized,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            songs.forEach { song ->
+                Surface(
+                    onClick = { onSelect(song) },
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        AsyncImage(
+                            url = song.thumbnail,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(48.dp).clip(MaterialTheme.shapes.medium),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = song.title,
+                                style = MaterialTheme.typography.titleSmallEmphasized,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = song.artists.joinToString { it.name },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Icon(
+                            imageVector = MetrolistIcons.Rounded.PlayArrow,
+                            contentDescription = stringResource(Res.string.play),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
