@@ -143,7 +143,7 @@ fun PodcastPreviewRoot() {
                 val destinations = listOf(
                     Triple(stringResource(Res.string.preview_show), MetrolistIcons.Outlined.Podcasts, PodcastPreviewPage.Show),
                     Triple(stringResource(Res.string.preview_player), MetrolistIcons.Rounded.PlayArrow, PodcastPreviewPage.Player),
-                    Triple(stringResource(Res.string.preview_episodes), MetrolistIcons.Rounded.QueueMusic, PodcastPreviewPage.Episodes),
+                    Triple(stringResource(Res.string.preview_episodes), MetrolistIcons.Outlined.QueueMusic, PodcastPreviewPage.Episodes),
                 )
                 destinations.forEach { (label, icon, destination) ->
                     NavigationBarItem(
@@ -473,7 +473,7 @@ private fun PlayerPreview(
             }
             IconButton(onClick = onUpNext) { Text("+30", style = MaterialTheme.typography.titleMedium) }
             FilledTonalIconButton(onClick = onUpNext) {
-                Icon(MetrolistIcons.Rounded.QueueMusic, contentDescription = stringResource(Res.string.preview_episodes))
+                Icon(MetrolistIcons.Outlined.QueueMusic, contentDescription = stringResource(Res.string.preview_episodes))
             }
         }
     }
