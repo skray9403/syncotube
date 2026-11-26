@@ -5715,4 +5715,26 @@
     <string name="preview_episode_details_4">28m · Sep 23, 2024</string>
     <string name="preview_episode_details_5">39m · Sep 16, 2024</string>
     <string name="preview_poster_title">SCAMTOWN</string>
+    <string name="preview_episode_show">Hyperfixed</string>
+    <string name="preview_episode_detail_title">Dance like nobody’s watching</string>
+    <string name="preview_episode_detail_meta">Nov 19, 2026 · 39m</string>
+    <string name="preview_episode_detail_body">Dance for PD is a community program designed as a way for people with Parkinsons, a degenerative neurological disease that causes difficulty with movement, to keep their bodies moving. Little did they know they were inadvertently tapping into a medical breakthrough. Hyperfixed only exists because of your support. Please consider becoming a premium member. In addition to helping us stay afloat, you’ll get bonus episodes, access to our Discord community, and ad-free listening.</string>
+    <string name="preview_download">Download</string>
+    <string name="preview_player_info">Episode info</string>
+    <string name="preview_player_chapter_title">Ferrari’s “Pepsi Challenge” and how…</string>
+    <string name="preview_player_chapter_subtitle">Chapter %1$d of %2$d</string>
+    <string name="preview_previous_chapter">Previous chapter</string>
+    <string name="preview_next_chapter">Next chapter</string>
+    <string name="preview_bookmark">Bookmark</string>
+    <string name="preview_sleep_timer">Sleep timer</string>
+    <string name="preview_replay_30">Replay 30 seconds</string>
+    <string name="preview_forward_30">Forward 30 seconds</string>
+    <string name="preview_player_poster">Ferrari</string>
+    <string name="preview_up_next_label">Up Next</string>
+    <string name="preview_show_subtitle">An Apple Original</string>
+    <string name="preview_show_description">Welcome to Scamtown! It’s a place where the true crime is stranger than fiction and the stories are filled with twists, turns, and small-town secrets.</string>
+    <string name="preview_subscribed">Subscribed</string>
+    <string name="preview_show_settings">Show settings</string>
+    <string name="preview_episode_poster_badge">RADIOTOPIA</string>
+    <string name="preview_episode_poster_title">HYPER FIXED</string>
 </resources>

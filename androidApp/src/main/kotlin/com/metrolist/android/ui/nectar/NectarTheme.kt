@@ -1,6 +1,7 @@
 package com.metrolist.android.ui.nectar
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
@@ -138,6 +139,106 @@ fun NectarTheme(
     val motionScheme = MotionScheme.expressive()
     MaterialExpressiveTheme(
         colorScheme = if (darkTheme) NectarDarkColorScheme else NectarLightColorScheme,
+        typography = NectarTypography,
+        shapes = NectarShapes,
+        motionScheme = motionScheme,
+        content = content,
+    )
+}
+
+val BrinkEpisodeColorScheme: ColorScheme = lightColorScheme(
+    primary = Color(0xFF201B0D),
+    onPrimary = Color(0xFFFBE99C),
+    primaryContainer = Color(0xFFA2E6F4),
+    onPrimaryContainer = Color(0xFF0A242B),
+    secondary = Color(0xFF4B4223),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFB3EAF5),
+    onSecondaryContainer = Color(0xFF102A32),
+    tertiary = Color(0xFF67CEE6),
+    onTertiary = Color(0xFF062129),
+    tertiaryContainer = Color(0xFFEBD37A),
+    onTertiaryContainer = Color(0xFF201B0D),
+    background = Color(0xFFEBD37A),
+    onBackground = Color(0xFF201B0D),
+    surface = Color(0xFFEBD37A),
+    onSurface = Color(0xFF201B0D),
+    surfaceVariant = Color(0xFFDCC366),
+    onSurfaceVariant = Color(0xFF4C4222),
+    surfaceContainerLowest = Color(0xFFF6E49D),
+    surfaceContainerLow = Color(0xFFEED885),
+    surfaceContainer = Color(0xFFE5CA6D),
+    surfaceContainerHigh = Color(0xFFB3EAF5),
+    surfaceContainerHighest = Color(0xFFA2E6F4),
+    outline = Color(0xFF7B6F46),
+    outlineVariant = Color(0xFFCBB45B),
+)
+
+val BrinkPlayerColorScheme: ColorScheme = darkColorScheme(
+    primary = Color(0xFF0A2A40),
+    onPrimary = Color(0xFFF2F6F8),
+    primaryContainer = Color(0xFF294352),
+    onPrimaryContainer = Color(0xFFE4EEF3),
+    secondary = Color(0xFFCBD7DE),
+    onSecondary = Color(0xFF142733),
+    secondaryContainer = Color(0xFFD6E1E7),
+    onSecondaryContainer = Color(0xFF132632),
+    tertiary = Color(0xFF152936),
+    onTertiary = Color(0xFFE9F1F5),
+    tertiaryContainer = Color(0xFF253C4A),
+    onTertiaryContainer = Color(0xFFE2ECF1),
+    background = Color(0xFF162936),
+    onBackground = Color(0xFF10202B),
+    surface = Color(0xFF8AA2B0),
+    onSurface = Color(0xFF10202B),
+    surfaceVariant = Color(0xFF5D7888),
+    onSurfaceVariant = Color(0xFF243845),
+    surfaceContainerLowest = Color(0xFF12232E),
+    surfaceContainerLow = Color(0xFF1E3442),
+    surfaceContainer = Color(0xFF294352),
+    surfaceContainerHigh = Color(0xFFD6E1E7),
+    surfaceContainerHighest = Color(0xFFE3ECF0),
+    outline = Color(0xFF516B7A),
+    outlineVariant = Color(0xFF6B8494),
+)
+
+val BrinkShowColorScheme: ColorScheme = lightColorScheme(
+    primary = Color(0xFF092314),
+    onPrimary = Color(0xFFB4F8C9),
+    primaryContainer = Color(0xFF8EF4AE),
+    onPrimaryContainer = Color(0xFF072312),
+    secondary = Color(0xFF124626),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFF7BE89E),
+    onSecondaryContainer = Color(0xFF092816),
+    tertiary = Color(0xFF2DB2E8),
+    onTertiary = Color(0xFF042230),
+    tertiaryContainer = Color(0xFF56C5F0),
+    onTertiaryContainer = Color(0xFF031F2C),
+    background = Color(0xFF109648),
+    onBackground = Color(0xFF072011),
+    surface = Color(0xFF109648),
+    onSurface = Color(0xFF072011),
+    surfaceVariant = Color(0xFF18A954),
+    onSurfaceVariant = Color(0xFF0F381E),
+    surfaceContainerLowest = Color(0xFF0D823D),
+    surfaceContainerLow = Color(0xFF149E4D),
+    surfaceContainer = Color(0xFF1CAE58),
+    surfaceContainerHigh = Color(0xFF7BE89E),
+    surfaceContainerHighest = Color(0xFF9AF5B7),
+    outline = Color(0xFF0E4925),
+    outlineVariant = Color(0xFF2BC067),
+)
+
+@Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+fun BrinkScreenTheme(
+    colorScheme: ColorScheme,
+    content: @Composable () -> Unit,
+) {
+    val motionScheme = MotionScheme.expressive()
+    MaterialExpressiveTheme(
+        colorScheme = colorScheme,
         typography = NectarTypography,
         shapes = NectarShapes,
         motionScheme = motionScheme,
