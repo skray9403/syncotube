@@ -900,11 +900,11 @@ fun MetrolistApp(
         val hiddenMiniPlayerBottomOffset = safeBottomPadding + miniPlayerBottomSpacing
         val navigationBottomInset =
             when {
-                !hasBottomNavigation -> 0.dp
+                !hasBottomNavigation || !shouldShowNavigationBar -> 0.dp
                 useFloatingNavBar -> floatingNavBarHeight
                 else -> navigationBarContentInset
             }
-        val navigationConsumesSpace = hasBottomNavigation && !useFloatingNavBar
+        val navigationConsumesSpace = hasBottomNavigation && shouldShowNavigationBar && !useFloatingNavBar
         val miniPlayerHeight =
             if (useDesktopMiniPlayer) {
                 DesktopMiniPlayerHeight
