@@ -204,6 +204,7 @@ import com.metrolist.android.ui.screens.BrowseScreen
 import com.metrolist.android.ui.screens.DownloadsScreen
 import com.metrolist.android.ui.screens.HistoryScreen
 import com.metrolist.android.ui.screens.HomeScreen
+import com.metrolist.android.ui.screens.NectarPrototypeScreen
 import com.metrolist.android.ui.screens.HomeSectionScreen
 import com.metrolist.android.ui.screens.IntegrationsScreen
 import com.metrolist.android.ui.screens.LibraryScreen
@@ -810,8 +811,11 @@ fun MetrolistApp(
         val captionHeight = WindowInsets.captionBar.getTop(LocalDensity.current)
         val statusBarHeight = WindowInsets.statusBars.getTop(LocalDensity.current)
         val hasDesktopCaption = shouldUseDesktopCaption(Build.VERSION.SDK_INT, captionHeight, useDesktopLayout, statusBarHeight)
+        val isNectarPrototypeRoute =
+            currentRoute == Screen.Home || currentRoute == Screen.Search || currentRoute == Screen.Library
         val shouldShowNavigationBar =
-            (useDesktopUi || currentRoute in topLevelRoutes) &&
+            !isNectarPrototypeRoute &&
+                (useDesktopUi || currentRoute in topLevelRoutes) &&
                 !(currentRoute == Screen.Search && searchResultsVisible)
         val usesDirectionalNavigation = isAndroidTv || isAutomotive
         val navigationSuiteType =
@@ -836,13 +840,13 @@ fun MetrolistApp(
                 navigationSuiteType.isNavigationBar
         val isImeVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
         val shouldHideMiniPlayerForIme = isLandscape && isImeVisible
-        val shouldShowMiniPlayer = hasMedia
+        val shouldShowMiniPlayer = hasMedia && !isNectarPrototypeRoute
         val immersiveContent = remember { mutableStateOf(false) }
         val shouldRenderMiniPlayer = shouldShowMiniPlayer && !shouldHideMiniPlayerForIme
 
         val topLevelScreens = remember { setOf(Screen.Home, Screen.Library, Screen.EasterEgg) }
         val shouldShowTopBar =
-            navigationState.topLevelRoute in topLevelScreens && currentRoute in topLevelScreens
+            !isNectarPrototypeRoute && navigationState.topLevelRoute in topLevelScreens && currentRoute in topLevelScreens
 
         val useFloatingTopBar = Settings.shared.floatingTopBar && !hasDesktopCaption
         val topAppBarScrollBehavior = appBarScrollBehavior()
@@ -2480,29 +2484,7 @@ fun getEntryProvider(
 ): (NavKey) -> NavEntry<NavKey> =
     entryProvider<NavKey> {
         entry<Screen.Home>(metadata = navTabMetadata) {
-            HomeScreen(
-                floatingActionsBottomInset = floatingActionsBottomInset,
-                onNavigateToAlbum = { albumId -> navigator.navigate(Screen.Album(albumId)) },
-                onNavigateToArtist = { artistId -> navigator.navigate(Screen.Artist(artistId)) },
-                onNavigateToPlaylist = { id, thumbnail -> navigator.navigate(Screen.Playlist(id, thumbnailHint = thumbnail)) },
-                onNavigateToPodcast = { podcastId -> navigator.navigate(Screen.Podcast(podcastId)) },
-                onNavigateToRecognition = { navigator.navigate(Screen.Recognition) },
-                onNavigateToWrapped = { navigator.navigate(Screen.Wrapped) },
-                onNavigateToLibrary = { filter ->
-                    filter?.let { Settings.shared.libraryFilter = it }
-                    navigator.navigate(Screen.Library)
-                },
-                onNavigateToBrowse = { browseId, params, title ->
-                    navigator.navigate(Screen.Browse(browseId, params, title))
-                },
-                onNavigateToVideoBrowse = { browseId, params, title ->
-                    navigator.navigate(Screen.Browse(browseId, params, title))
-                },
-                onNavigateToHomeSection = { shelf ->
-                    navigator.navigate(Screen.HomeSection(shelf.pageKey, shelf.title, shelf.toHomeSection()))
-                },
-                scrollToTopEvents = homeScrollToTopEvents,
-            )
+            NectarPrototypeScreen(initialTab = "home")
         }
 
         entry<Screen.EasterEgg>(metadata = navTabMetadata) {
@@ -2545,31 +2527,11 @@ fun getEntryProvider(
         }
 
         entry<Screen.Library>(metadata = navTabMetadata) {
-            LibraryScreen(
-                viewModel = libraryViewModel,
-                floatingActionsBottomInset = floatingActionsBottomInset,
-                scrollToTopEvents = libraryScrollToTopEvents,
-                onNavigateToAlbum = { albumId -> navigator.navigate(Screen.Album(albumId)) },
-                onNavigateToArtist = { artistId -> navigator.navigate(Screen.Artist(artistId)) },
-                onNavigateToPlaylist = { id, thumbnail -> navigator.navigate(Screen.Playlist(id, thumbnailHint = thumbnail)) },
-                onNavigateToPodcast = { podcastId -> navigator.navigate(Screen.Podcast(podcastId)) },
-                onNavigateToPlaylistImport = { navigator.navigate(Screen.PlaylistImport) },
-                onNavigateToAutoPlaylist = { type ->
-                    // Keep podcast auto playlists on the Library stack so Back returns to the podcast library.
-                    navigator.navigate(Screen.Library)
-                    navigator.navigate(Screen.AutoPlaylist(type))
-                },
-            )
+            NectarPrototypeScreen(initialTab = "library")
         }
 
         entry<Screen.Search>(metadata = navTabMetadata) {
-            SearchScreen(
-                navigator = navigator,
-                floatingActionsBottomInset = floatingActionsBottomInset,
-                initialQuery = pendingSearchQuery(),
-                onInitialQueryConsumed = onSearchQueryConsumed,
-                onSearchResultsVisible = onSearchResultsVisible,
-            )
+            NectarPrototypeScreen(initialTab = "search")
         }
 
         entry<Screen.Recognition>(metadata = navTabMetadata) {
