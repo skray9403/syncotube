@@ -2,8 +2,26 @@
 
 package com.metrolist.android.ui.nectar
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +29,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,20 +49,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalToggleButton
 import androidx.compose.material3.Icon
@@ -54,6 +72,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,11 +93,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -88,7 +109,6 @@ import androidx.compose.ui.unit.sp
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.preview_add_favorite
 import com.metrolist.shared.generated.resources.preview_back
-import com.metrolist.shared.generated.resources.preview_back_to_show
 import com.metrolist.shared.generated.resources.preview_bookmark
 import com.metrolist.shared.generated.resources.preview_cast
 import com.metrolist.shared.generated.resources.preview_completed
@@ -145,6 +165,7 @@ import com.metrolist.shared.ui.icons.MetrolistIcons
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -240,68 +261,80 @@ fun PodcastPreviewRoot() {
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
+        beyondViewportPageCount = 1,
     ) { page ->
-        when (page) {
-            0 -> BrinkScreenTheme(BrinkEpisodeColorScheme) {
-                EpisodeDetailScreen(
-                    downloaded = downloaded,
-                    onBack = { scope.launch { pagerState.animateScrollToPage(2) } },
-                    onPlay = {
-                        playing = true
-                        scope.launch { pagerState.animateScrollToPage(1) }
-                    },
-                    onDownload = { downloaded = !downloaded },
-                    onOpenShow = { scope.launch { pagerState.animateScrollToPage(2) } },
-                )
-            }
+        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).coerceIn(-1f, 1f)
+        val scale = 1f - (abs(pageOffset) * 0.04f)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+        ) {
+            when (page) {
+                0 -> BrinkScreenTheme(BrinkEpisodeColorScheme) {
+                    EpisodeDetailScreen(
+                        downloaded = downloaded,
+                        onBack = { scope.launch { pagerState.animateScrollToPage(2) } },
+                        onPlay = {
+                            playing = true
+                            scope.launch { pagerState.animateScrollToPage(1) }
+                        },
+                        onDownload = { downloaded = !downloaded },
+                        onOpenShow = { scope.launch { pagerState.animateScrollToPage(2) } },
+                    )
+                }
 
-            1 -> BrinkScreenTheme(BrinkPlayerColorScheme) {
-                BrinkPlayerScreen(
-                    playing = playing,
-                    liked = liked,
-                    bookmarked = bookmarked,
-                    sleepTimerActive = sleepTimerActive,
-                    speed = PlaybackSpeeds[speedIndex],
-                    chapter = chapterIndex,
-                    totalChapters = 17,
-                    progress = progress,
-                    onDismiss = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    onUpNext = { scope.launch { pagerState.animateScrollToPage(2) } },
-                    onPreviousChapter = { if (chapterIndex > 1) chapterIndex -= 1 },
-                    onNextChapter = { if (chapterIndex < 17) chapterIndex += 1 },
-                    onToggleLike = { liked = !liked },
-                    onCycleSpeed = { speedIndex = (speedIndex + 1) % PlaybackSpeeds.size },
-                    onToggleBookmark = { bookmarked = !bookmarked },
-                    onToggleSleepTimer = { sleepTimerActive = !sleepTimerActive },
-                    onSeek = { progress = it.coerceIn(0f, 1f) },
-                    onReplay30 = { progress = (progress - 0.03f).coerceAtLeast(0f) },
-                    onForward30 = { progress = (progress + 0.03f).coerceAtMost(1f) },
-                    onPlayPause = { playing = !playing },
-                )
-            }
+                1 -> BrinkScreenTheme(BrinkPlayerColorScheme) {
+                    BrinkPlayerScreen(
+                        playing = playing,
+                        liked = liked,
+                        bookmarked = bookmarked,
+                        sleepTimerActive = sleepTimerActive,
+                        speed = PlaybackSpeeds[speedIndex],
+                        chapter = chapterIndex,
+                        totalChapters = 17,
+                        progress = progress,
+                        onDismiss = { scope.launch { pagerState.animateScrollToPage(0) } },
+                        onUpNext = { scope.launch { pagerState.animateScrollToPage(2) } },
+                        onPreviousChapter = { if (chapterIndex > 1) chapterIndex -= 1 },
+                        onNextChapter = { if (chapterIndex < 17) chapterIndex += 1 },
+                        onToggleLike = { liked = !liked },
+                        onCycleSpeed = { speedIndex = (speedIndex + 1) % PlaybackSpeeds.size },
+                        onToggleBookmark = { bookmarked = !bookmarked },
+                        onToggleSleepTimer = { sleepTimerActive = !sleepTimerActive },
+                        onSeek = { progress = it.coerceIn(0f, 1f) },
+                        onReplay30 = { progress = (progress - 0.03f).coerceAtLeast(0f) },
+                        onForward30 = { progress = (progress + 0.03f).coerceAtMost(1f) },
+                        onPlayPause = { playing = !playing },
+                    )
+                }
 
-            2 -> BrinkScreenTheme(BrinkShowColorScheme) {
-                ShowDetailScreen(
-                    selectedFilter = selectedFilter,
-                    subscribed = subscribed,
-                    notifyEnabled = notifyEnabled,
-                    favorite = favorite,
-                    episodes = episodes,
-                    onBack = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    onPlayLatest = {
-                        playing = true
-                        scope.launch { pagerState.animateScrollToPage(1) }
-                    },
-                    onToggleSubscribed = { subscribed = !subscribed },
-                    onToggleNotify = { notifyEnabled = !notifyEnabled },
-                    onToggleFavorite = { favorite = !favorite },
-                    onFilterSelected = { selectedFilter = it },
-                    onEpisodeClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    onPlayEpisode = {
-                        playing = true
-                        scope.launch { pagerState.animateScrollToPage(1) }
-                    },
-                )
+                2 -> BrinkScreenTheme(BrinkShowColorScheme) {
+                    ShowDetailScreen(
+                        selectedFilter = selectedFilter,
+                        subscribed = subscribed,
+                        notifyEnabled = notifyEnabled,
+                        favorite = favorite,
+                        episodes = episodes,
+                        onBack = { scope.launch { pagerState.animateScrollToPage(0) } },
+                        onPlayLatest = {
+                            playing = true
+                            scope.launch { pagerState.animateScrollToPage(1) }
+                        },
+                        onToggleSubscribed = { subscribed = !subscribed },
+                        onToggleNotify = { notifyEnabled = !notifyEnabled },
+                        onToggleFavorite = { favorite = !favorite },
+                        onFilterSelected = { selectedFilter = it },
+                        onEpisodeClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                        onPlayEpisode = {
+                            playing = true
+                            scope.launch { pagerState.animateScrollToPage(1) }
+                        },
+                    )
+                }
             }
         }
     }
@@ -323,8 +356,8 @@ private fun EpisodeDetailScreen(
                 Brush.verticalGradient(
                     colorStops = arrayOf(
                         0.0f to colors.tertiary,
-                        0.42f to colors.tertiary.copy(alpha = 0.72f),
-                        0.54f to colors.surface,
+                        0.40f to colors.tertiary.copy(alpha = 0.85f),
+                        0.50f to colors.surface,
                         1.0f to colors.surface,
                     ),
                 ),
@@ -336,7 +369,7 @@ private fun EpisodeDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -396,7 +429,7 @@ private fun EpisodeDetailScreen(
                     .aspectRatio(0.95f),
             )
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier
@@ -407,7 +440,7 @@ private fun EpisodeDetailScreen(
             ) {
                 Text(
                     text = stringResource(Res.string.preview_episode_show),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
                     color = colors.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(2.dp))
@@ -419,11 +452,15 @@ private fun EpisodeDetailScreen(
                 )
             }
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(3.dp))
 
             Text(
                 text = stringResource(Res.string.preview_episode_detail_title),
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 23.sp,
+                    lineHeight = 29.sp,
+                ),
                 color = colors.onSurface,
             )
 
@@ -435,11 +472,14 @@ private fun EpisodeDetailScreen(
                 color = colors.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
             Text(
                 text = stringResource(Res.string.preview_episode_detail_body),
-                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 25.sp),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 15.sp,
+                    lineHeight = 23.sp,
+                ),
                 color = colors.onSurface,
             )
 
@@ -476,6 +516,15 @@ private fun BrinkPlayerScreen(
     val elapsedSeconds = (totalSeconds * progress).roundToInt()
     val remainingSeconds = (totalSeconds - elapsedSeconds).coerceAtLeast(0)
 
+    val artworkScale by animateFloatAsState(
+        targetValue = if (playing) 1f else 0.94f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "artworkScale",
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -483,8 +532,8 @@ private fun BrinkPlayerScreen(
                 Brush.verticalGradient(
                     colorStops = arrayOf(
                         0.0f to colors.surfaceContainerLowest,
-                        0.45f to colors.background,
-                        0.66f to colors.surface,
+                        0.44f to colors.background,
+                        0.62f to colors.surface,
                         1.0f to colors.surface,
                     ),
                 ),
@@ -495,7 +544,7 @@ private fun BrinkPlayerScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
@@ -647,7 +696,11 @@ private fun BrinkPlayerScreen(
                 title = stringResource(Res.string.preview_player_poster),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.12f),
+                    .aspectRatio(1.10f)
+                    .graphicsLayer {
+                        scaleX = artworkScale
+                        scaleY = artworkScale
+                    },
             )
 
             Spacer(Modifier.weight(0.45f))
@@ -673,26 +726,33 @@ private fun BrinkPlayerScreen(
                     )
                 }
 
-                Column(
+                AnimatedContent(
+                    targetState = chapter,
+                    transitionSpec = {
+                        (fadeIn(tween(220)) + slideInVertically { it / 3 }) togetherWith
+                            (fadeOut(tween(180)) + slideOutVertically { -it / 3 })
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = stringResource(Res.string.preview_player_chapter_title),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(Res.string.preview_player_chapter_subtitle, chapter, totalChapters),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                    )
+                    label = "chapterInfo",
+                ) { currentChapter ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(Res.string.preview_player_chapter_title),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(Res.string.preview_player_chapter_subtitle, currentChapter, totalChapters),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 Box(
@@ -701,13 +761,17 @@ private fun BrinkPlayerScreen(
                 ) {
                     val chapterProgress by animateFloatAsState(
                         targetValue = chapter.toFloat() / totalChapters.toFloat(),
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
                         label = "chapterProgress",
                     )
                     CircularProgressIndicator(
                         progress = { chapterProgress },
                         modifier = Modifier.fillMaxSize(),
                         color = colors.primary,
-                        trackColor = colors.surfaceVariant.copy(alpha = 0.45f),
+                        trackColor = colors.surfaceVariant.copy(alpha = 0.40f),
                         strokeWidth = 3.5.dp,
                     )
                     FilledTonalIconButton(
@@ -766,6 +830,7 @@ private fun BrinkPlayerScreen(
 
             ExpressiveWavyScrubber(
                 progress = progress,
+                playing = playing,
                 activeColor = colors.primary,
                 inactiveColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
                 onSeek = onSeek,
@@ -794,6 +859,38 @@ private fun BrinkPlayerScreen(
 
             Spacer(Modifier.height(18.dp))
 
+            val replayInteraction = remember { MutableInteractionSource() }
+            val replayPressed by replayInteraction.collectIsPressedAsState()
+            val replayScale by animateFloatAsState(
+                targetValue = if (replayPressed) 0.93f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "replayScale",
+            )
+
+            val playInteraction = remember { MutableInteractionSource() }
+            val playPressed by playInteraction.collectIsPressedAsState()
+            val playScale by animateFloatAsState(
+                targetValue = if (playPressed) 0.94f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "playScale",
+            )
+            val playCorner by animateDpAsState(
+                targetValue = if (playing) 20.dp else 38.dp,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                label = "playCorner",
+            )
+
+            val forwardInteraction = remember { MutableInteractionSource() }
+            val forwardPressed by forwardInteraction.collectIsPressedAsState()
+            val forwardScale by animateFloatAsState(
+                targetValue = if (forwardPressed) 0.93f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "forwardScale",
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -803,12 +900,17 @@ private fun BrinkPlayerScreen(
             ) {
                 Surface(
                     onClick = onReplay30,
+                    interactionSource = replayInteraction,
                     shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 14.dp, bottomEnd = 14.dp),
                     color = colors.secondaryContainer,
                     contentColor = colors.onSecondaryContainer,
                     modifier = Modifier
                         .weight(1f)
-                        .height(74.dp),
+                        .height(74.dp)
+                        .graphicsLayer {
+                            scaleX = replayScale
+                            scaleY = replayScale
+                        },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         SkipSecondsBadge(
@@ -820,36 +922,51 @@ private fun BrinkPlayerScreen(
                     }
                 }
 
-                val playCorner by animateFloatAsState(
-                    targetValue = if (playing) 22f else 37f,
-                    label = "playCorner",
-                )
                 Surface(
                     onClick = onPlayPause,
-                    shape = RoundedCornerShape(playCorner.dp),
+                    interactionSource = playInteraction,
+                    shape = RoundedCornerShape(playCorner),
                     color = colors.primary,
                     contentColor = colors.onPrimary,
                     modifier = Modifier
                         .weight(1.18f)
-                        .height(74.dp),
+                        .height(74.dp)
+                        .graphicsLayer {
+                            scaleX = playScale
+                            scaleY = playScale
+                        },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (playing) MetrolistIcons.Rounded.Pause else MetrolistIcons.Rounded.PlayArrow,
-                            contentDescription = stringResource(if (playing) Res.string.preview_pause else Res.string.preview_play),
-                            modifier = Modifier.size(34.dp),
-                        )
+                        AnimatedContent(
+                            targetState = playing,
+                            transitionSpec = {
+                                (scaleIn(initialScale = 0.72f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn()) togetherWith
+                                    (scaleOut(targetScale = 0.72f) + fadeOut())
+                            },
+                            label = "playPauseIcon",
+                        ) { isPlaying ->
+                            Icon(
+                                imageVector = if (isPlaying) MetrolistIcons.Rounded.Pause else MetrolistIcons.Rounded.PlayArrow,
+                                contentDescription = stringResource(if (isPlaying) Res.string.preview_pause else Res.string.preview_play),
+                                modifier = Modifier.size(34.dp),
+                            )
+                        }
                     }
                 }
 
                 Surface(
                     onClick = onForward30,
+                    interactionSource = forwardInteraction,
                     shape = RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp, topEnd = 28.dp, bottomEnd = 28.dp),
                     color = colors.secondaryContainer,
                     contentColor = colors.onSecondaryContainer,
                     modifier = Modifier
                         .weight(1f)
-                        .height(74.dp),
+                        .height(74.dp)
+                        .graphicsLayer {
+                            scaleX = forwardScale
+                            scaleY = forwardScale
+                        },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         SkipSecondsBadge(
@@ -882,8 +999,15 @@ private fun ShowDetailScreen(
     onPlayEpisode: (PreviewEpisode) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val listState = rememberLazyListState()
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+
+    val heroScrollOffset by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset.toFloat() else 400f
+        }
+    }
 
     val filterLabels = listOf(
         stringResource(Res.string.preview_episodes),
@@ -893,6 +1017,7 @@ private fun ShowDetailScreen(
     )
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(colors.surface)
@@ -903,16 +1028,20 @@ private fun ShowDetailScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(370.dp),
+                    .height(365.dp),
             ) {
                 ShowHeroArtwork(
                     title = stringResource(Res.string.preview_poster_title),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationY = heroScrollOffset * 0.28f
+                        },
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(100.dp)
+                        .height(104.dp)
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
@@ -924,7 +1053,7 @@ private fun ShowDetailScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -967,8 +1096,8 @@ private fun ShowDetailScreen(
 
                 Text(
                     text = stringResource(Res.string.preview_show_subtitle),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = colors.onPrimary,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    color = Color.White,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 14.dp),
@@ -1052,15 +1181,22 @@ private fun ShowDetailScreen(
                     val selected = selectedFilter == index
                     val pillColor by animateColorAsState(
                         targetValue = if (selected) colors.primary else colors.primaryContainer,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                         label = "filterPill",
                     )
                     val labelColor by animateColorAsState(
                         targetValue = if (selected) colors.onPrimary else colors.onPrimaryContainer,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                         label = "filterText",
+                    )
+                    val cornerRadius by animateDpAsState(
+                        targetValue = if (selected) 20.dp else 14.dp,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                        label = "filterCorner",
                     )
                     Surface(
                         onClick = { onFilterSelected(index) },
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(cornerRadius),
                         color = pillColor,
                         contentColor = labelColor,
                     ) {
@@ -1152,14 +1288,23 @@ private fun ShowDetailScreen(
                     )
                 }
 
-                if (selecting) {
+                AnimatedVisibility(
+                    visible = selecting,
+                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                    exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                ) {
                     Checkbox(
                         checked = checked,
                         onCheckedChange = {
                             selectedIds = if (checked) selectedIds - episode.id else selectedIds + episode.id
                         },
                     )
-                } else {
+                }
+                AnimatedVisibility(
+                    visible = !selecting,
+                    enter = fadeIn() + scaleIn(initialScale = 0.85f),
+                    exit = fadeOut() + scaleOut(targetScale = 0.85f),
+                ) {
                     ConnectedIconActionGroup(
                         actions = listOf(
                             ConnectedActionItem(
@@ -1256,19 +1401,33 @@ private fun PlayerActionPill(
     label: String,
 ) {
     val colors = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "pillScale",
+    )
     val bg by animateColorAsState(
         targetValue = if (selected) colors.primary else colors.secondaryContainer,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "pillBg",
     )
     val fg by animateColorAsState(
         targetValue = if (selected) colors.onPrimary else colors.onSecondaryContainer,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "pillFg",
     )
     Surface(
         onClick = onClick,
+        interactionSource = interactionSource,
         shape = CircleShape,
         color = bg,
         contentColor = fg,
+        modifier = Modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
@@ -1292,12 +1451,32 @@ private fun PlayerActionPill(
 @Composable
 private fun ExpressiveWavyScrubber(
     progress: Float,
+    playing: Boolean,
     activeColor: Color,
     inactiveColor: Color,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val clamped = progress.coerceIn(0f, 1f)
+    val infiniteTransition = rememberInfiniteTransition(label = "wavePhase")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "phase",
+    )
+    val amplitudeMultiplier by animateFloatAsState(
+        targetValue = if (playing) 1f else 0.12f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "waveAmp",
+    )
+
     Canvas(
         modifier = modifier
             .pointerInput(Unit) {
@@ -1314,18 +1493,20 @@ private fun ExpressiveWavyScrubber(
     ) {
         val centerY = size.height / 2f
         val playheadX = size.width * clamped
-        val waveAmplitude = size.height * 0.24f
+        val baseAmplitude = size.height * 0.27f * amplitudeMultiplier
         val wavePeriodPx = 28.dp.toPx()
         val strokePx = 2.6.dp.toPx()
 
         if (playheadX > 4.dp.toPx()) {
             val wavePath = Path()
-            val stepPx = 3f
+            val stepPx = 2.5f
             var x = 0f
             wavePath.moveTo(0f, centerY)
             while (x <= playheadX) {
-                val angle = (x / wavePeriodPx) * (2f * PI.toFloat())
-                val y = centerY + sin(angle) * waveAmplitude
+                val t = x / size.width.coerceAtLeast(1f)
+                val envelope = 0.65f + 0.35f * sin(t * 7.5f + phase * 0.5f)
+                val angle = (x / wavePeriodPx) * (2f * PI.toFloat()) - phase
+                val y = centerY + sin(angle) * baseAmplitude * envelope
                 wavePath.lineTo(x, y)
                 x += stepPx
             }
@@ -1399,66 +1580,105 @@ private fun EpisodeHeroArtwork(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
-            .background(colors.tertiary),
+            .background(Color(0xFF47BBE2)),
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            // Sky gradient
             drawRect(
                 brush = Brush.verticalGradient(
-                    listOf(colors.tertiary, colors.primaryContainer, colors.surfaceContainerLowest),
+                    colorStops = arrayOf(
+                        0.0f to Color(0xFF39B5E6),
+                        0.55f to Color(0xFFA7DFDF),
+                        0.72f to Color(0xFFE7CC82),
+                        1.0f to Color(0xFFDDC06C),
+                    ),
                 ),
             )
-            // Warm skyline silhouette
-            val skyline = Path().apply {
-                moveTo(0f, size.height * 0.65f)
-                lineTo(size.width * 0.14f, size.height * 0.65f)
-                lineTo(size.width * 0.14f, size.height * 0.56f)
-                lineTo(size.width * 0.30f, size.height * 0.56f)
-                lineTo(size.width * 0.30f, size.height * 0.62f)
-                lineTo(size.width * 0.48f, size.height * 0.62f)
-                lineTo(size.width * 0.48f, size.height * 0.52f)
-                lineTo(size.width * 0.68f, size.height * 0.52f)
-                lineTo(size.width * 0.68f, size.height * 0.60f)
-                lineTo(size.width * 0.85f, size.height * 0.60f)
-                lineTo(size.width * 0.85f, size.height * 0.54f)
-                lineTo(size.width, size.height * 0.54f)
-                lineTo(size.width, size.height)
-                lineTo(0f, size.height)
-                close()
+            // Neighborhood houses silhouettes
+            val houseColors = listOf(Color(0xFFB36542), Color(0xFFD2A765), Color(0xFF6B8A9C), Color(0xFFC47A53))
+            val widths = listOf(0.22f, 0.24f, 0.25f, 0.29f)
+            var curX = 0f
+            widths.forEachIndexed { idx, wFrac ->
+                val hw = size.width * wFrac
+                val hh = size.height * (0.20f + (idx % 2) * 0.05f)
+                val topY = size.height * 0.66f - hh
+                drawRect(
+                    color = houseColors[idx],
+                    topLeft = Offset(curX, topY),
+                    size = Size(hw - 4.dp.toPx(), hh),
+                )
+                val roof = Path().apply {
+                    moveTo(curX - 4.dp.toPx(), topY)
+                    lineTo(curX + hw * 0.5f, topY - size.height * 0.08f)
+                    lineTo(curX + hw, topY)
+                    close()
+                }
+                drawPath(roof, color = Color(0xFF51382A))
+                curX += hw
             }
-            drawPath(skyline, color = colors.secondary.copy(alpha = 0.25f))
-            // Ground & character accents
+            // Sidewalk
             drawRect(
-                color = colors.surfaceVariant,
-                topLeft = Offset(0f, size.height * 0.78f),
-                size = Size(size.width, size.height * 0.22f),
+                color = Color(0xFFDFC78B),
+                topLeft = Offset(0f, size.height * 0.66f),
+                size = Size(size.width, size.height * 0.34f),
             )
+            // Cartoon character: head, headphones, red shirt, dark pants
             drawCircle(
-                color = colors.primary,
-                radius = size.minDimension * 0.14f,
-                center = Offset(size.width * 0.50f, size.height * 0.48f),
+                color = Color(0xFFF3C4A4),
+                radius = size.minDimension * 0.11f,
+                center = Offset(size.width * 0.49f, size.height * 0.46f),
+            )
+            // Headphones band
+            drawArc(
+                color = Color(0xFF1E2832),
+                startAngle = 190f,
+                sweepAngle = 160f,
+                useCenter = false,
+                topLeft = Offset(size.width * 0.36f, size.height * 0.32f),
+                size = Size(size.width * 0.26f, size.height * 0.22f),
+                style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+            )
+            // Red shirt torso
+            drawRoundRect(
+                color = Color(0xFFD62B2B),
+                topLeft = Offset(size.width * 0.41f, size.height * 0.56f),
+                size = Size(size.width * 0.16f, size.height * 0.16f),
+                cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx()),
+            )
+            // Dark pants/legs
+            drawRoundRect(
+                color = Color(0xFF28303D),
+                topLeft = Offset(size.width * 0.42f, size.height * 0.70f),
+                size = Size(size.width * 0.06f, size.height * 0.15f),
+                cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
             )
             drawRoundRect(
-                color = colors.secondary,
-                topLeft = Offset(size.width * 0.42f, size.height * 0.58f),
-                size = Size(size.width * 0.16f, size.height * 0.19f),
-                cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx()),
+                color = Color(0xFF28303D),
+                topLeft = Offset(size.width * 0.50f, size.height * 0.70f),
+                size = Size(size.width * 0.06f, size.height * 0.14f),
+                cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
             )
         }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontWeight = FontWeight.ExtraBold,
-                fontStyle = FontStyle.Italic,
-                letterSpacing = 1.sp,
-            ),
-            color = colors.onTertiaryContainer,
-            textAlign = TextAlign.Center,
+        // Bold comic logo
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 24.dp, start = 16.dp, end = 16.dp),
-        )
+                .padding(top = 18.dp, start = 16.dp, end = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    fontStyle = FontStyle.Italic,
+                    letterSpacing = 1.sp,
+                ),
+                color = Color(0xFFF6D638),
+                textAlign = TextAlign.Center,
+            )
+        }
         Surface(
-            color = colors.tertiary,
+            color = Color(0xFF56A9D4),
             shape = RoundedCornerShape(6.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -1467,7 +1687,7 @@ private fun EpisodeHeroArtwork(
             Text(
                 text = badge,
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = colors.onTertiary,
+                color = Color.White,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
@@ -1479,50 +1699,78 @@ private fun PlayerPosterArtwork(
     title: String,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
-            .background(colors.surfaceContainerLowest),
+            .background(Color(0xFF10212B)),
     ) {
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.verticalGradient(
-                    listOf(colors.surfaceContainerLowest, colors.background, colors.surfaceContainer),
+                    colorStops = arrayOf(
+                        0.0f to Color(0xFF0C1C26),
+                        0.60f to Color(0xFF1F3847),
+                        0.72f to Color(0xFF7B93A3),
+                        1.0f to Color(0xFF8EA4B2),
+                    ),
                 ),
             )
-            // Stylized sports car silhouette
-            val body = Path().apply {
-                moveTo(size.width * 0.14f, size.height * 0.67f)
-                lineTo(size.width * 0.22f, size.height * 0.58f)
-                lineTo(size.width * 0.44f, size.height * 0.54f)
-                lineTo(size.width * 0.62f, size.height * 0.50f)
-                lineTo(size.width * 0.78f, size.height * 0.56f)
-                lineTo(size.width * 0.86f, size.height * 0.66f)
+            // Ground shadow
+            drawOval(
+                color = Color(0xAA0A161E),
+                topLeft = Offset(size.width * 0.14f, size.height * 0.67f),
+                size = Size(size.width * 0.72f, size.height * 0.07f),
+            )
+            // Ferrari F40-inspired silhouette facing left
+            val carBody = Path().apply {
+                moveTo(size.width * 0.12f, size.height * 0.66f)
+                lineTo(size.width * 0.14f, size.height * 0.60f)
+                lineTo(size.width * 0.34f, size.height * 0.56f)
+                lineTo(size.width * 0.45f, size.height * 0.49f)
+                lineTo(size.width * 0.63f, size.height * 0.49f)
+                lineTo(size.width * 0.76f, size.height * 0.55f)
+                lineTo(size.width * 0.80f, size.height * 0.45f)
+                lineTo(size.width * 0.86f, size.height * 0.45f)
+                lineTo(size.width * 0.87f, size.height * 0.65f)
                 close()
             }
-            drawPath(body, color = colors.onPrimary.copy(alpha = 0.88f))
-            drawCircle(
-                color = colors.primary,
-                radius = size.minDimension * 0.065f,
-                center = Offset(size.width * 0.30f, size.height * 0.68f),
-            )
-            drawCircle(
-                color = colors.primary,
-                radius = size.minDimension * 0.065f,
-                center = Offset(size.width * 0.72f, size.height * 0.68f),
-            )
+            drawPath(carBody, color = Color(0xFFC81E1E))
+            // Cabin glass
+            val cabin = Path().apply {
+                moveTo(size.width * 0.38f, size.height * 0.55f)
+                lineTo(size.width * 0.46f, size.height * 0.50f)
+                lineTo(size.width * 0.60f, size.height * 0.50f)
+                lineTo(size.width * 0.66f, size.height * 0.55f)
+                close()
+            }
+            drawPath(cabin, color = Color(0xFF1A252D))
+            // Wheels + silver rims
+            val wheelRadius = size.minDimension * 0.068f
+            listOf(0.28f, 0.72f).forEach { cx ->
+                drawCircle(
+                    color = Color(0xFF121619),
+                    radius = wheelRadius,
+                    center = Offset(size.width * cx, size.height * 0.66f),
+                )
+                drawCircle(
+                    color = Color(0xFFC5CFD5),
+                    radius = wheelRadius * 0.58f,
+                    center = Offset(size.width * cx, size.height * 0.66f),
+                )
+            }
         }
         Text(
             text = title,
             style = MaterialTheme.typography.displaySmall.copy(
+                fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.5).sp,
+                fontSize = 40.sp,
             ),
-            color = colors.onPrimary,
+            color = Color.White,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 28.dp),
+                .padding(top = 34.dp),
         )
     }
 }
@@ -1539,24 +1787,28 @@ private fun ShowHeroArtwork(
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.verticalGradient(
-                    listOf(colors.tertiary, colors.tertiaryContainer, colors.surface),
+                    colorStops = arrayOf(
+                        0.0f to Color(0xFF28AEE6),
+                        0.55f to Color(0xFF4CC4F0),
+                        1.0f to colors.surface,
+                    ),
                 ),
             )
             // Clouds
             drawCircle(
-                color = colors.onSecondary,
+                color = Color.White.copy(alpha = 0.92f),
                 radius = size.minDimension * 0.11f,
-                center = Offset(size.width * 0.08f, size.height * 0.24f),
+                center = Offset(size.width * 0.06f, size.height * 0.25f),
             )
             drawCircle(
-                color = colors.onSecondary,
-                radius = size.minDimension * 0.10f,
-                center = Offset(size.width * 0.90f, size.height * 0.21f),
+                color = Color.White.copy(alpha = 0.92f),
+                radius = size.minDimension * 0.09f,
+                center = Offset(size.width * 0.91f, size.height * 0.22f),
             )
-            // Rolling green hill
+            // Rolling emerald hill
             val hill = Path().apply {
-                moveTo(0f, size.height * 0.64f)
-                quadraticTo(size.width * 0.45f, size.height * 0.52f, size.width, size.height * 0.66f)
+                moveTo(0f, size.height * 0.66f)
+                quadraticTo(size.width * 0.45f, size.height * 0.54f, size.width, size.height * 0.68f)
                 lineTo(size.width, size.height)
                 lineTo(0f, size.height)
                 close()
@@ -1566,14 +1818,14 @@ private fun ShowHeroArtwork(
             val boardLeft = size.width * 0.16f
             val boardTop = size.height * 0.44f
             val boardWidth = size.width * 0.68f
-            val boardHeight = size.height * 0.22f
+            val boardHeight = size.height * 0.23f
             drawRect(
-                color = colors.tertiary,
+                color = Color(0xFF39B2E3),
                 topLeft = Offset(boardLeft, boardTop),
                 size = Size(boardWidth, boardHeight),
             )
             drawRect(
-                color = colors.primary,
+                color = Color(0xFF0A2416),
                 topLeft = Offset(boardLeft, boardTop),
                 size = Size(boardWidth, boardHeight),
                 style = Stroke(width = 1.5.dp.toPx()),
@@ -1581,9 +1833,18 @@ private fun ShowHeroArtwork(
             for (i in 1..5) {
                 val x = boardLeft + boardWidth * (i / 6f)
                 drawLine(
-                    color = colors.primary.copy(alpha = 0.65f),
+                    color = Color(0xFF0A2416).copy(alpha = 0.6f),
                     start = Offset(x, boardTop),
                     end = Offset(x, boardTop + boardHeight),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            for (j in 1..2) {
+                val y = boardTop + boardHeight * (j / 3f)
+                drawLine(
+                    color = Color(0xFF0A2416).copy(alpha = 0.6f),
+                    start = Offset(boardLeft, y),
+                    end = Offset(boardLeft + boardWidth, y),
                     strokeWidth = 1.dp.toPx(),
                 )
             }
@@ -1593,13 +1854,14 @@ private fun ShowHeroArtwork(
             style = MaterialTheme.typography.displayMedium.copy(
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.5.sp,
+                fontSize = 42.sp,
             ),
-            color = colors.primaryContainer,
+            color = Color(0xFFF6D96B),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(top = 64.dp, start = 20.dp, end = 20.dp),
+                .padding(top = 60.dp, start = 20.dp, end = 20.dp),
         )
     }
 }
@@ -1612,14 +1874,14 @@ private fun ShowEpisodeThumbnail(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            drawRect(colors.tertiary)
+            drawRect(Color(0xFF34B5E8))
             drawRect(
                 color = colors.surface,
                 topLeft = Offset(0f, size.height * 0.62f),
                 size = Size(size.width, size.height * 0.38f),
             )
             drawCircle(
-                color = colors.primaryContainer,
+                color = Color(0xFFF6D96B),
                 radius = size.minDimension * 0.24f,
                 center = Offset(size.width * 0.5f, size.height * 0.48f),
             )
