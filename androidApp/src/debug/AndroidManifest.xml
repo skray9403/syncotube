@@ -5,7 +5,7 @@
             android:name="com.metrolist.android.ui.nectar.NectarPreviewActivity"
             android:exported="true"
             android:label="Podcast UI Preview"
-            android:theme="@style/Theme.Metrolist.Starting">
+            android:theme="@style/Theme.Metrolist">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

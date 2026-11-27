@@ -5,6 +5,7 @@ package com.metrolist.android.ui.nectar
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -32,12 +33,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -97,6 +98,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -166,6 +168,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -176,6 +179,16 @@ private data class PreviewEpisode(
 )
 
 private val PlaybackSpeeds = listOf(1.0f, 1.2f, 1.5f, 2.0f)
+
+private fun <T> expressiveSpatialSpring() = spring<T>(
+    dampingRatio = 0.8f,
+    stiffness = 380f,
+)
+
+private fun <T> expressiveColorTween() = tween<T>(
+    durationMillis = 220,
+    easing = FastOutSlowInEasing,
+)
 
 private val BookmarkOutlineIcon: ImageVector by lazy {
     ImageVector.Builder(
@@ -264,7 +277,7 @@ fun PodcastPreviewRoot() {
         beyondViewportPageCount = 1,
     ) { page ->
         val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).coerceIn(-1f, 1f)
-        val scale = 1f - (abs(pageOffset) * 0.04f)
+        val scale = 1f - (abs(pageOffset) * 0.03f)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -349,141 +362,169 @@ private fun EpisodeDetailScreen(
     onOpenShow: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    Box(
+    val scrollState = rememberScrollState()
+    val fadeRangePx = with(LocalDensity.current) { 150.dp.toPx() }
+    val scrollFade by remember {
+        derivedStateOf { (scrollState.value / fadeRangePx).coerceIn(0f, 1f) }
+    }
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0.0f to colors.tertiary,
-                        0.40f to colors.tertiary.copy(alpha = 0.85f),
-                        0.50f to colors.surface,
-                        1.0f to colors.surface,
-                    ),
-                ),
-            ),
+            .background(colors.surface),
     ) {
+        val heroHeight = (maxHeight * 0.44f).coerceAtLeast(300.dp)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 20.dp, vertical = 10.dp),
+                .verticalScroll(scrollState)
+                .windowInsetsPadding(WindowInsets.navigationBars),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(heroHeight),
             ) {
-                FilledTonalIconButton(
-                    onClick = onBack,
-                    modifier = Modifier.size(44.dp),
-                    shapes = IconButtonDefaults.shapes(),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = colors.primaryContainer,
-                        contentColor = colors.onPrimaryContainer,
-                    ),
+                EpisodeHeroArtwork(
+                    title = stringResource(Res.string.preview_episode_poster_title),
+                    badge = stringResource(Res.string.preview_episode_poster_badge),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = 1f - (scrollFade * 0.35f)
+                            translationY = scrollState.value * 0.25f
+                        },
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(heroHeight * 0.42f)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to Color.Transparent,
+                                    0.55f to colors.surface.copy(alpha = 0.68f),
+                                    1.0f to colors.surface,
+                                ),
+                            ),
+                        ),
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onOpenShow)
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Text(
+                        text = stringResource(Res.string.preview_episode_show),
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                        color = colors.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(2.dp))
                     Icon(
-                        imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(Res.string.preview_back),
+                        imageVector = MetrolistIcons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
 
-                ConnectedIconActionGroup(
-                    actions = listOf(
-                        ConnectedActionItem(
-                            icon = MetrolistIcons.Rounded.PlayArrow,
-                            contentDescription = stringResource(Res.string.preview_play),
-                            checked = false,
-                            onClick = onPlay,
-                        ),
-                        ConnectedActionItem(
-                            icon = if (downloaded) MetrolistIcons.Default.Check else MetrolistIcons.Default.Download,
-                            contentDescription = stringResource(Res.string.preview_download),
-                            checked = downloaded,
-                            onClick = onDownload,
-                        ),
-                        ConnectedActionItem(
-                            icon = MetrolistIcons.Default.MoreHoriz,
-                            contentDescription = stringResource(Res.string.preview_more_options),
-                            checked = false,
-                            onClick = onOpenShow,
-                        ),
-                    ),
-                    containerColor = colors.primaryContainer,
-                    contentColor = colors.onPrimaryContainer,
-                    checkedContainerColor = colors.primary,
-                    checkedContentColor = colors.onPrimary,
-                )
-            }
+                Spacer(Modifier.height(4.dp))
 
-            Spacer(Modifier.height(14.dp))
-
-            EpisodeHeroArtwork(
-                title = stringResource(Res.string.preview_episode_poster_title),
-                badge = stringResource(Res.string.preview_episode_poster_badge),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.95f),
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onOpenShow)
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
                 Text(
-                    text = stringResource(Res.string.preview_episode_show),
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+                    text = stringResource(Res.string.preview_episode_detail_title),
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 23.sp,
+                        lineHeight = 29.sp,
+                    ),
+                    color = colors.onSurface,
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(Res.string.preview_episode_detail_meta),
+                    style = MaterialTheme.typography.labelLarge,
                     color = colors.onSurfaceVariant,
                 )
-                Spacer(Modifier.width(2.dp))
+
+                Spacer(Modifier.height(14.dp))
+
+                Text(
+                    text = stringResource(Res.string.preview_episode_detail_body),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
+                    ),
+                    color = colors.onSurface,
+                )
+
+                Spacer(Modifier.height(28.dp))
+            }
+        }
+
+        // Floating translucent top controls
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilledTonalIconButton(
+                onClick = onBack,
+                modifier = Modifier.size(44.dp),
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = colors.primaryContainer.copy(alpha = 0.88f),
+                    contentColor = colors.onPrimaryContainer,
+                ),
+            ) {
                 Icon(
-                    imageVector = MetrolistIcons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = colors.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
+                    imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(Res.string.preview_back),
                 )
             }
 
-            Spacer(Modifier.height(3.dp))
-
-            Text(
-                text = stringResource(Res.string.preview_episode_detail_title),
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 23.sp,
-                    lineHeight = 29.sp,
+            ConnectedIconActionGroup(
+                actions = listOf(
+                    ConnectedActionItem(
+                        icon = MetrolistIcons.Rounded.PlayArrow,
+                        contentDescription = stringResource(Res.string.preview_play),
+                        checked = false,
+                        onClick = onPlay,
+                    ),
+                    ConnectedActionItem(
+                        icon = if (downloaded) MetrolistIcons.Default.Check else MetrolistIcons.Default.Download,
+                        contentDescription = stringResource(Res.string.preview_download),
+                        checked = downloaded,
+                        onClick = onDownload,
+                    ),
+                    ConnectedActionItem(
+                        icon = MetrolistIcons.Default.MoreHoriz,
+                        contentDescription = stringResource(Res.string.preview_more_options),
+                        checked = false,
+                        onClick = onOpenShow,
+                    ),
                 ),
-                color = colors.onSurface,
+                containerColor = colors.primaryContainer.copy(alpha = 0.88f),
+                contentColor = colors.onPrimaryContainer,
+                checkedContainerColor = colors.primary,
+                checkedContentColor = colors.onPrimary,
             )
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = stringResource(Res.string.preview_episode_detail_meta),
-                style = MaterialTheme.typography.labelLarge,
-                color = colors.onSurfaceVariant,
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                text = stringResource(Res.string.preview_episode_detail_body),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 15.sp,
-                    lineHeight = 23.sp,
-                ),
-                color = colors.onSurface,
-            )
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -516,39 +557,63 @@ private fun BrinkPlayerScreen(
     val elapsedSeconds = (totalSeconds * progress).roundToInt()
     val remainingSeconds = (totalSeconds - elapsedSeconds).coerceAtLeast(0)
 
-    val artworkScale by animateFloatAsState(
-        targetValue = if (playing) 1f else 0.94f,
+    var isScrubbing by remember { mutableStateOf(false) }
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow,
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
         ),
-        label = "artworkScale",
+        label = "scrubberProgress",
     )
+    val displayedProgress = if (isScrubbing) progress else animatedProgress
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0.0f to colors.surfaceContainerLowest,
-                        0.44f to colors.background,
-                        0.62f to colors.surface,
-                        1.0f to colors.surface,
-                    ),
-                ),
-            ),
+            .background(colors.surface),
     ) {
+        val heroHeight = (maxHeight * 0.45f).coerceAtLeast(290.dp)
+
+        // Full-bleed top artwork extending behind floating top controls, fading smoothly into slate-blue surface
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(heroHeight),
+        ) {
+            PlayerPosterArtwork(
+                title = stringResource(Res.string.preview_player_poster),
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(heroHeight * 0.46f)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to Color.Transparent,
+                                0.55f to colors.surfaceVariant.copy(alpha = 0.78f),
+                                1.0f to colors.surface,
+                            ),
+                        ),
+                    ),
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 20.dp, vertical = 10.dp),
+                .windowInsetsPadding(WindowInsets.navigationBars),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Floating translucent top controls
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -557,7 +622,7 @@ private fun BrinkPlayerScreen(
                     modifier = Modifier.size(44.dp),
                     shapes = IconButtonDefaults.shapes(),
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = colors.primaryContainer,
+                        containerColor = colors.primaryContainer.copy(alpha = 0.85f),
                         contentColor = colors.onPrimaryContainer,
                     ),
                 ) {
@@ -580,7 +645,7 @@ private fun BrinkPlayerScreen(
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
                                 colors = ToggleButtonDefaults.colors(
-                                    containerColor = colors.primaryContainer,
+                                    containerColor = colors.primaryContainer.copy(alpha = 0.85f),
                                     contentColor = colors.onPrimaryContainer,
                                 ),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -609,7 +674,7 @@ private fun BrinkPlayerScreen(
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
                                 colors = ToggleButtonDefaults.colors(
-                                    containerColor = colors.primaryContainer,
+                                    containerColor = colors.primaryContainer.copy(alpha = 0.85f),
                                     contentColor = colors.onPrimaryContainer,
                                 ),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -638,7 +703,7 @@ private fun BrinkPlayerScreen(
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
                                 colors = ToggleButtonDefaults.colors(
-                                    containerColor = colors.primaryContainer,
+                                    containerColor = colors.primaryContainer.copy(alpha = 0.85f),
                                     contentColor = colors.onPrimaryContainer,
                                 ),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -667,7 +732,7 @@ private fun BrinkPlayerScreen(
                                 interactionSource = interactionSource,
                                 shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
                                 colors = ToggleButtonDefaults.colors(
-                                    containerColor = colors.primaryContainer,
+                                    containerColor = colors.primaryContainer.copy(alpha = 0.85f),
                                     contentColor = colors.onPrimaryContainer,
                                 ),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -690,92 +755,21 @@ private fun BrinkPlayerScreen(
                 }
             }
 
-            Spacer(Modifier.weight(0.55f))
+            Spacer(Modifier.weight(1f))
 
-            PlayerPosterArtwork(
-                title = stringResource(Res.string.preview_player_poster),
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.10f)
-                    .graphicsLayer {
-                        scaleX = artworkScale
-                        scaleY = artworkScale
-                    },
-            )
-
-            Spacer(Modifier.weight(0.45f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                FilledTonalIconButton(
-                    onClick = onPreviousChapter,
-                    modifier = Modifier.size(44.dp),
-                    shapes = IconButtonDefaults.shapes(),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = colors.secondaryContainer,
-                        contentColor = colors.onSecondaryContainer,
-                    ),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Icon(
-                        imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(Res.string.preview_previous_chapter),
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-
-                AnimatedContent(
-                    targetState = chapter,
-                    transitionSpec = {
-                        (fadeIn(tween(220)) + slideInVertically { it / 3 }) togetherWith
-                            (fadeOut(tween(180)) + slideOutVertically { -it / 3 })
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp),
-                    label = "chapterInfo",
-                ) { currentChapter ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = stringResource(Res.string.preview_player_chapter_title),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = colors.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(Res.string.preview_player_chapter_subtitle, currentChapter, totalChapters),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colors.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier.size(56.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val chapterProgress by animateFloatAsState(
-                        targetValue = chapter.toFloat() / totalChapters.toFloat(),
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow,
-                        ),
-                        label = "chapterProgress",
-                    )
-                    CircularProgressIndicator(
-                        progress = { chapterProgress },
-                        modifier = Modifier.fillMaxSize(),
-                        color = colors.primary,
-                        trackColor = colors.surfaceVariant.copy(alpha = 0.40f),
-                        strokeWidth = 3.5.dp,
-                    )
                     FilledTonalIconButton(
-                        onClick = onNextChapter,
+                        onClick = onPreviousChapter,
                         modifier = Modifier.size(44.dp),
                         shapes = IconButtonDefaults.shapes(),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -784,197 +778,263 @@ private fun BrinkPlayerScreen(
                         ),
                     ) {
                         Icon(
-                            imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = stringResource(Res.string.preview_next_chapter),
+                            imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(Res.string.preview_previous_chapter),
                             modifier = Modifier.size(18.dp),
                         )
                     }
-                }
-            }
 
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                PlayerActionPill(
-                    selected = liked,
-                    onClick = onToggleLike,
-                    icon = if (liked) MetrolistIcons.Rounded.Favorite else MetrolistIcons.Outlined.FavoriteBorder,
-                    label = stringResource(Res.string.preview_like),
-                )
-                PlayerActionPill(
-                    selected = speed != 1.0f,
-                    onClick = onCycleSpeed,
-                    icon = MetrolistIcons.Default.Speed,
-                    label = "${speed}×",
-                )
-                PlayerActionPill(
-                    selected = bookmarked,
-                    onClick = onToggleBookmark,
-                    icon = if (bookmarked) BookmarkFilledIcon else BookmarkOutlineIcon,
-                    label = stringResource(Res.string.preview_bookmark),
-                )
-                PlayerActionPill(
-                    selected = sleepTimerActive,
-                    onClick = onToggleSleepTimer,
-                    icon = MetrolistIcons.Outlined.Bedtime,
-                    label = stringResource(Res.string.preview_sleep_timer),
-                )
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            ExpressiveWavyScrubber(
-                progress = progress,
-                playing = playing,
-                activeColor = colors.primary,
-                inactiveColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
-                onSeek = onSeek,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp),
-            )
-
-            Spacer(Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = formatHms(elapsedSeconds),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                )
-                Text(
-                    text = "-${formatHms(remainingSeconds)}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            val replayInteraction = remember { MutableInteractionSource() }
-            val replayPressed by replayInteraction.collectIsPressedAsState()
-            val replayScale by animateFloatAsState(
-                targetValue = if (replayPressed) 0.93f else 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                label = "replayScale",
-            )
-
-            val playInteraction = remember { MutableInteractionSource() }
-            val playPressed by playInteraction.collectIsPressedAsState()
-            val playScale by animateFloatAsState(
-                targetValue = if (playPressed) 0.94f else 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                label = "playScale",
-            )
-            val playCorner by animateDpAsState(
-                targetValue = if (playing) 20.dp else 38.dp,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-                label = "playCorner",
-            )
-
-            val forwardInteraction = remember { MutableInteractionSource() }
-            val forwardPressed by forwardInteraction.collectIsPressedAsState()
-            val forwardScale by animateFloatAsState(
-                targetValue = if (forwardPressed) 0.93f else 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                label = "forwardScale",
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    onClick = onReplay30,
-                    interactionSource = replayInteraction,
-                    shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp, topEnd = 14.dp, bottomEnd = 14.dp),
-                    color = colors.secondaryContainer,
-                    contentColor = colors.onSecondaryContainer,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(74.dp)
-                        .graphicsLayer {
-                            scaleX = replayScale
-                            scaleY = replayScale
+                    AnimatedContent(
+                        targetState = chapter,
+                        transitionSpec = {
+                            (fadeIn(tween(150)) + slideInVertically { it / 4 }) togetherWith
+                                (fadeOut(tween(150)) + slideOutVertically { -it / 4 })
                         },
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        SkipSecondsBadge(
-                            seconds = 30,
-                            forward = false,
-                            tint = colors.onSecondaryContainer,
-                            contentDescription = stringResource(Res.string.preview_replay_30),
-                        )
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp),
+                        label = "chapterInfo",
+                    ) { currentChapter ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(Res.string.preview_player_chapter_title),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 15.5.sp,
+                                    lineHeight = 20.sp,
+                                    letterSpacing = (-0.2).sp,
+                                ),
+                                color = colors.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(Res.string.preview_player_chapter_subtitle, currentChapter, totalChapters),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.onSurfaceVariant,
+                            )
+                        }
                     }
-                }
 
-                Surface(
-                    onClick = onPlayPause,
-                    interactionSource = playInteraction,
-                    shape = RoundedCornerShape(playCorner),
-                    color = colors.primary,
-                    contentColor = colors.onPrimary,
-                    modifier = Modifier
-                        .weight(1.18f)
-                        .height(74.dp)
-                        .graphicsLayer {
-                            scaleX = playScale
-                            scaleY = playScale
-                        },
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        AnimatedContent(
-                            targetState = playing,
-                            transitionSpec = {
-                                (scaleIn(initialScale = 0.72f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn()) togetherWith
-                                    (scaleOut(targetScale = 0.72f) + fadeOut())
-                            },
-                            label = "playPauseIcon",
-                        ) { isPlaying ->
+                    Box(
+                        modifier = Modifier.size(56.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val chapterProgress by animateFloatAsState(
+                            targetValue = chapter.toFloat() / totalChapters.toFloat(),
+                            animationSpec = expressiveSpatialSpring(),
+                            label = "chapterProgress",
+                        )
+                        CircularProgressIndicator(
+                            progress = { chapterProgress },
+                            modifier = Modifier.fillMaxSize(),
+                            color = colors.primary,
+                            trackColor = colors.surfaceVariant.copy(alpha = 0.40f),
+                            strokeWidth = 3.5.dp,
+                        )
+                        FilledTonalIconButton(
+                            onClick = onNextChapter,
+                            modifier = Modifier.size(44.dp),
+                            shapes = IconButtonDefaults.shapes(),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = colors.secondaryContainer,
+                                contentColor = colors.onSecondaryContainer,
+                            ),
+                        ) {
                             Icon(
-                                imageVector = if (isPlaying) MetrolistIcons.Rounded.Pause else MetrolistIcons.Rounded.PlayArrow,
-                                contentDescription = stringResource(if (isPlaying) Res.string.preview_pause else Res.string.preview_play),
-                                modifier = Modifier.size(34.dp),
+                                imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = stringResource(Res.string.preview_next_chapter),
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
                 }
 
-                Surface(
-                    onClick = onForward30,
-                    interactionSource = forwardInteraction,
-                    shape = RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp, topEnd = 28.dp, bottomEnd = 28.dp),
-                    color = colors.secondaryContainer,
-                    contentColor = colors.onSecondaryContainer,
+                Spacer(Modifier.height(14.dp))
+
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(74.dp)
-                        .graphicsLayer {
-                            scaleX = forwardScale
-                            scaleY = forwardScale
-                        },
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        SkipSecondsBadge(
-                            seconds = 30,
-                            forward = true,
-                            tint = colors.onSecondaryContainer,
-                            contentDescription = stringResource(Res.string.preview_forward_30),
-                        )
+                    PlayerActionPill(
+                        selected = liked,
+                        onClick = onToggleLike,
+                        icon = if (liked) MetrolistIcons.Rounded.Favorite else MetrolistIcons.Outlined.FavoriteBorder,
+                        label = stringResource(Res.string.preview_like),
+                    )
+                    PlayerActionPill(
+                        selected = speed != 1.0f,
+                        onClick = onCycleSpeed,
+                        icon = MetrolistIcons.Default.Speed,
+                        label = "${speed}×",
+                    )
+                    PlayerActionPill(
+                        selected = bookmarked,
+                        onClick = onToggleBookmark,
+                        icon = if (bookmarked) BookmarkFilledIcon else BookmarkOutlineIcon,
+                        label = stringResource(Res.string.preview_bookmark),
+                    )
+                    PlayerActionPill(
+                        selected = sleepTimerActive,
+                        onClick = onToggleSleepTimer,
+                        icon = MetrolistIcons.Outlined.Bedtime,
+                        label = stringResource(Res.string.preview_sleep_timer),
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                ExpressiveWavyScrubber(
+                    progress = displayedProgress,
+                    playing = playing,
+                    activeColor = colors.primary,
+                    inactiveColor = colors.onSurfaceVariant.copy(alpha = 0.35f),
+                    onScrubStart = { isScrubbing = true },
+                    onScrubEnd = { isScrubbing = false },
+                    onSeek = onSeek,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp),
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = formatHms(elapsedSeconds),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "-${formatHms(remainingSeconds)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                val replayInteraction = remember { MutableInteractionSource() }
+                val replayPressed by replayInteraction.collectIsPressedAsState()
+                val replayScale by animateFloatAsState(
+                    targetValue = if (replayPressed) 0.94f else 1f,
+                    animationSpec = expressiveSpatialSpring(),
+                    label = "replayScale",
+                )
+
+                val playInteraction = remember { MutableInteractionSource() }
+                val playPressed by playInteraction.collectIsPressedAsState()
+                val playScale by animateFloatAsState(
+                    targetValue = if (playPressed) 0.94f else 1f,
+                    animationSpec = expressiveSpatialSpring(),
+                    label = "playScale",
+                )
+                val playCorner by animateDpAsState(
+                    targetValue = if (playing) 18.dp else 36.dp,
+                    animationSpec = expressiveSpatialSpring(),
+                    label = "playCorner",
+                )
+
+                val forwardInteraction = remember { MutableInteractionSource() }
+                val forwardPressed by forwardInteraction.collectIsPressedAsState()
+                val forwardScale by animateFloatAsState(
+                    targetValue = if (forwardPressed) 0.94f else 1f,
+                    animationSpec = expressiveSpatialSpring(),
+                    label = "forwardScale",
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        onClick = onReplay30,
+                        interactionSource = replayInteraction,
+                        shape = RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp, topEnd = 12.dp, bottomEnd = 12.dp),
+                        color = colors.secondaryContainer,
+                        contentColor = colors.onSecondaryContainer,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(74.dp)
+                            .graphicsLayer {
+                                scaleX = replayScale
+                                scaleY = replayScale
+                            },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            SkipSecondsBadge(
+                                seconds = 30,
+                                forward = false,
+                                tint = colors.onSecondaryContainer,
+                                contentDescription = stringResource(Res.string.preview_replay_30),
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = onPlayPause,
+                        interactionSource = playInteraction,
+                        shape = RoundedCornerShape(playCorner),
+                        color = colors.primary,
+                        contentColor = colors.onPrimary,
+                        modifier = Modifier
+                            .weight(1.18f)
+                            .height(74.dp)
+                            .graphicsLayer {
+                                scaleX = playScale
+                                scaleY = playScale
+                            },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            AnimatedContent(
+                                targetState = playing,
+                                transitionSpec = {
+                                    (scaleIn(initialScale = 0.78f, animationSpec = expressiveSpatialSpring()) + fadeIn(tween(150))) togetherWith
+                                        (scaleOut(targetScale = 0.78f) + fadeOut(tween(150)))
+                                },
+                                label = "playPauseIcon",
+                            ) { isPlaying ->
+                                Icon(
+                                    imageVector = if (isPlaying) MetrolistIcons.Rounded.Pause else MetrolistIcons.Rounded.PlayArrow,
+                                    contentDescription = stringResource(if (isPlaying) Res.string.preview_pause else Res.string.preview_play),
+                                    modifier = Modifier.size(34.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    Surface(
+                        onClick = onForward30,
+                        interactionSource = forwardInteraction,
+                        shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp, topEnd = 20.dp, bottomEnd = 20.dp),
+                        color = colors.secondaryContainer,
+                        contentColor = colors.onSecondaryContainer,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(74.dp)
+                            .graphicsLayer {
+                                scaleX = forwardScale
+                                scaleY = forwardScale
+                            },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            SkipSecondsBadge(
+                                seconds = 30,
+                                forward = true,
+                                tint = colors.onSecondaryContainer,
+                                contentDescription = stringResource(Res.string.preview_forward_30),
+                            )
+                        }
                     }
                 }
             }
@@ -1003,11 +1063,13 @@ private fun ShowDetailScreen(
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(emptySet<String>()) }
 
+    val fadeRangePx = with(LocalDensity.current) { 150.dp.toPx() }
     val heroScrollOffset by remember {
         derivedStateOf {
-            if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset.toFloat() else 400f
+            if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset.toFloat() else fadeRangePx
         }
     }
+    val heroFade = (heroScrollOffset / fadeRangePx).coerceIn(0f, 1f)
 
     val filterLabels = listOf(
         stringResource(Res.string.preview_episodes),
@@ -1016,317 +1078,331 @@ private fun ShowDetailScreen(
         stringResource(Res.string.preview_completed),
     )
 
-    LazyColumn(
-        state = listState,
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.surface)
-            .windowInsetsPadding(WindowInsets.navigationBars),
-        contentPadding = PaddingValues(bottom = 28.dp),
+            .background(colors.surface),
     ) {
-        item(key = "show_hero", contentType = "show_hero") {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(365.dp),
-            ) {
-                ShowHeroArtwork(
-                    title = stringResource(Res.string.preview_poster_title),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationY = heroScrollOffset * 0.28f
-                        },
-                )
+        val heroHeight = (maxHeight * 0.36f).coerceAtLeast(270.dp)
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars),
+            contentPadding = PaddingValues(bottom = 28.dp),
+        ) {
+            item(key = "show_hero", contentType = "show_hero") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(104.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Transparent, colors.surface),
+                        .height(heroHeight),
+                ) {
+                    ShowHeroArtwork(
+                        title = stringResource(Res.string.preview_poster_title),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = 1f - (heroFade * 0.35f)
+                                translationY = heroScrollOffset * 0.28f
+                            },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(heroHeight * 0.42f)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to Color.Transparent,
+                                        0.55f to colors.surface.copy(alpha = 0.72f),
+                                        1.0f to colors.surface,
+                                    ),
+                                ),
                             ),
-                        ),
-                )
-                Row(
+                    )
+                    Text(
+                        text = stringResource(Res.string.preview_show_subtitle),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                        color = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 14.dp),
+                    )
+                }
+            }
+
+            item(key = "show_actions", contentType = "show_actions") {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(horizontal = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    FilledTonalIconButton(
-                        onClick = onBack,
-                        modifier = Modifier.size(44.dp),
-                        shapes = IconButtonDefaults.shapes(),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = colors.primaryContainer,
-                            contentColor = colors.onPrimaryContainer,
-                        ),
-                    ) {
-                        Icon(
-                            imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(Res.string.preview_back),
-                        )
-                    }
-
                     ConnectedIconActionGroup(
                         actions = listOf(
                             ConnectedActionItem(
-                                icon = MetrolistIcons.Rounded.PlayArrow,
-                                contentDescription = stringResource(Res.string.preview_play_latest),
-                                checked = false,
-                                onClick = onPlayLatest,
+                                icon = MetrolistIcons.Default.Check,
+                                contentDescription = stringResource(Res.string.preview_subscribed),
+                                checked = subscribed,
+                                onClick = onToggleSubscribed,
                             ),
                             ConnectedActionItem(
-                                icon = MetrolistIcons.Default.MoreVert,
-                                contentDescription = stringResource(Res.string.preview_more_options),
+                                icon = MetrolistIcons.Outlined.NotificationsNone,
+                                contentDescription = stringResource(if (notifyEnabled) Res.string.preview_notifications_on else Res.string.preview_notify_me),
+                                checked = notifyEnabled,
+                                onClick = onToggleNotify,
+                            ),
+                            ConnectedActionItem(
+                                icon = MetrolistIcons.Default.Settings,
+                                contentDescription = stringResource(Res.string.preview_show_settings),
                                 checked = false,
                                 onClick = { selecting = !selecting },
                             ),
+                            ConnectedActionItem(
+                                icon = if (favorite) MetrolistIcons.Default.Star else MetrolistIcons.Outlined.Star,
+                                contentDescription = stringResource(Res.string.preview_add_favorite),
+                                checked = favorite,
+                                onClick = onToggleFavorite,
+                            ),
                         ),
                         containerColor = colors.primaryContainer,
                         contentColor = colors.onPrimaryContainer,
-                        checkedContainerColor = colors.primary,
-                        checkedContentColor = colors.onPrimary,
+                        checkedContainerColor = colors.primaryContainer,
+                        checkedContentColor = colors.onPrimaryContainer,
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = stringResource(Res.string.preview_show_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = stringResource(Res.string.preview_podcast_categories),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant.copy(alpha = 0.90f),
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
+
+            item(key = "show_filters", contentType = "show_filters") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    filterLabels.forEachIndexed { index, label ->
+                        val selected = selectedFilter == index
+                        val pillColor by animateColorAsState(
+                            targetValue = if (selected) colors.primary else colors.primaryContainer,
+                            animationSpec = expressiveColorTween(),
+                            label = "filterPill",
+                        )
+                        val labelColor by animateColorAsState(
+                            targetValue = if (selected) colors.onPrimary else colors.onPrimaryContainer,
+                            animationSpec = expressiveColorTween(),
+                            label = "filterText",
+                        )
+                        val cornerRadius by animateDpAsState(
+                            targetValue = if (selected) 20.dp else 14.dp,
+                            animationSpec = expressiveSpatialSpring(),
+                            label = "filterCorner",
+                        )
+                        Surface(
+                            onClick = { onFilterSelected(index) },
+                            shape = RoundedCornerShape(cornerRadius),
+                            color = pillColor,
+                            contentColor = labelColor,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            item(key = "show_list_header", contentType = "show_list_header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.preview_episode_count),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.onSurface,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = stringResource(if (selecting) Res.string.preview_done else Res.string.preview_select),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                selecting = !selecting
+                                if (!selecting) selectedIds = emptySet()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
                     )
                 }
+            }
 
-                Text(
-                    text = stringResource(Res.string.preview_show_subtitle),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                    color = Color.White,
+            items(
+                items = episodes,
+                key = { it.id },
+                contentType = { "show_episode_row" },
+            ) { episode ->
+                val checked = episode.id in selectedIds
+                Row(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 14.dp),
-                )
-            }
-        }
-
-        item(key = "show_actions", contentType = "show_actions") {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                ConnectedIconActionGroup(
-                    actions = listOf(
-                        ConnectedActionItem(
-                            icon = MetrolistIcons.Default.Check,
-                            contentDescription = stringResource(Res.string.preview_subscribed),
-                            checked = subscribed,
-                            onClick = onToggleSubscribed,
-                        ),
-                        ConnectedActionItem(
-                            icon = MetrolistIcons.Outlined.NotificationsNone,
-                            contentDescription = stringResource(if (notifyEnabled) Res.string.preview_notifications_on else Res.string.preview_notify_me),
-                            checked = notifyEnabled,
-                            onClick = onToggleNotify,
-                        ),
-                        ConnectedActionItem(
-                            icon = MetrolistIcons.Default.Settings,
-                            contentDescription = stringResource(Res.string.preview_show_settings),
-                            checked = false,
-                            onClick = { selecting = !selecting },
-                        ),
-                        ConnectedActionItem(
-                            icon = if (favorite) MetrolistIcons.Default.Star else MetrolistIcons.Outlined.Star,
-                            contentDescription = stringResource(Res.string.preview_add_favorite),
-                            checked = favorite,
-                            onClick = onToggleFavorite,
-                        ),
-                    ),
-                    containerColor = colors.primaryContainer,
-                    contentColor = colors.onPrimaryContainer,
-                    checkedContainerColor = colors.primaryContainer,
-                    checkedContentColor = colors.onPrimaryContainer,
-                )
-
-                Spacer(Modifier.height(14.dp))
-
-                Text(
-                    text = stringResource(Res.string.preview_show_description),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    text = stringResource(Res.string.preview_podcast_categories),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant.copy(alpha = 0.88f),
-                    textAlign = TextAlign.Center,
-                )
-
-                Spacer(Modifier.height(16.dp))
-            }
-        }
-
-        item(key = "show_filters", contentType = "show_filters") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                filterLabels.forEachIndexed { index, label ->
-                    val selected = selectedFilter == index
-                    val pillColor by animateColorAsState(
-                        targetValue = if (selected) colors.primary else colors.primaryContainer,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                        label = "filterPill",
+                        .fillMaxWidth()
+                        .clickable {
+                            if (selecting) {
+                                selectedIds = if (checked) selectedIds - episode.id else selectedIds + episode.id
+                            } else {
+                                onEpisodeClick(episode)
+                            }
+                        }
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ShowEpisodeThumbnail(
+                        title = stringResource(Res.string.preview_poster_title),
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(14.dp)),
                     )
-                    val labelColor by animateColorAsState(
-                        targetValue = if (selected) colors.onPrimary else colors.onPrimaryContainer,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                        label = "filterText",
-                    )
-                    val cornerRadius by animateDpAsState(
-                        targetValue = if (selected) 20.dp else 14.dp,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                        label = "filterCorner",
-                    )
-                    Surface(
-                        onClick = { onFilterSelected(index) },
-                        shape = RoundedCornerShape(cornerRadius),
-                        color = pillColor,
-                        contentColor = labelColor,
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLarge,
+                            text = stringResource(Res.string.preview_podcast_title),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                        Text(
+                            text = episode.title,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.onSurface,
                             maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = episode.details,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = selecting,
+                        enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.85f, animationSpec = expressiveSpatialSpring()),
+                        exit = fadeOut(tween(150)) + scaleOut(targetScale = 0.85f),
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = {
+                                selectedIds = if (checked) selectedIds - episode.id else selectedIds + episode.id
+                            },
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = !selecting,
+                        enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.88f, animationSpec = expressiveSpatialSpring()),
+                        exit = fadeOut(tween(150)) + scaleOut(targetScale = 0.88f),
+                    ) {
+                        ConnectedIconActionGroup(
+                            actions = listOf(
+                                ConnectedActionItem(
+                                    icon = MetrolistIcons.Rounded.PlayArrow,
+                                    contentDescription = stringResource(Res.string.preview_play_episode),
+                                    checked = false,
+                                    onClick = { onPlayEpisode(episode) },
+                                ),
+                                ConnectedActionItem(
+                                    icon = MetrolistIcons.Default.MoreVert,
+                                    contentDescription = stringResource(Res.string.preview_more_options),
+                                    checked = false,
+                                    onClick = { onEpisodeClick(episode) },
+                                ),
+                            ),
+                            containerColor = colors.primaryContainer,
+                            contentColor = colors.onPrimaryContainer,
+                            checkedContainerColor = colors.primary,
+                            checkedContentColor = colors.onPrimary,
                         )
                     }
                 }
             }
         }
 
-        item(key = "show_list_header", contentType = "show_list_header") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        // Floating top controls over full-bleed banner
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilledTonalIconButton(
+                onClick = onBack,
+                modifier = Modifier.size(44.dp),
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = colors.primaryContainer.copy(alpha = 0.90f),
+                    contentColor = colors.onPrimaryContainer,
+                ),
             ) {
-                Text(
-                    text = stringResource(Res.string.preview_episode_count),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colors.onSurface,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    text = stringResource(if (selecting) Res.string.preview_done else Res.string.preview_select),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
-                            selecting = !selecting
-                            if (!selecting) selectedIds = emptySet()
-                        }
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                Icon(
+                    imageVector = MetrolistIcons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(Res.string.preview_back),
                 )
             }
-        }
 
-        items(
-            items = episodes,
-            key = { it.id },
-            contentType = { "show_episode_row" },
-        ) { episode ->
-            val checked = episode.id in selectedIds
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        if (selecting) {
-                            selectedIds = if (checked) selectedIds - episode.id else selectedIds + episode.id
-                        } else {
-                            onEpisodeClick(episode)
-                        }
-                    }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ShowEpisodeThumbnail(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.preview_podcast_title),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant,
-                    )
-                    Text(
-                        text = episode.title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = episode.details,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = selecting,
-                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                ) {
-                    Checkbox(
-                        checked = checked,
-                        onCheckedChange = {
-                            selectedIds = if (checked) selectedIds - episode.id else selectedIds + episode.id
-                        },
-                    )
-                }
-                AnimatedVisibility(
-                    visible = !selecting,
-                    enter = fadeIn() + scaleIn(initialScale = 0.85f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.85f),
-                ) {
-                    ConnectedIconActionGroup(
-                        actions = listOf(
-                            ConnectedActionItem(
-                                icon = MetrolistIcons.Rounded.PlayArrow,
-                                contentDescription = stringResource(Res.string.preview_play_episode),
-                                checked = false,
-                                onClick = { onPlayEpisode(episode) },
-                            ),
-                            ConnectedActionItem(
-                                icon = MetrolistIcons.Default.MoreVert,
-                                contentDescription = stringResource(Res.string.preview_more_options),
-                                checked = false,
-                                onClick = { onEpisodeClick(episode) },
-                            ),
-                        ),
-                        containerColor = colors.primaryContainer,
-                        contentColor = colors.onPrimaryContainer,
-                        checkedContainerColor = colors.primary,
-                        checkedContentColor = colors.onPrimary,
-                    )
-                }
-            }
+            ConnectedIconActionGroup(
+                actions = listOf(
+                    ConnectedActionItem(
+                        icon = MetrolistIcons.Rounded.PlayArrow,
+                        contentDescription = stringResource(Res.string.preview_play_latest),
+                        checked = false,
+                        onClick = onPlayLatest,
+                    ),
+                    ConnectedActionItem(
+                        icon = MetrolistIcons.Default.MoreVert,
+                        contentDescription = stringResource(Res.string.preview_more_options),
+                        checked = false,
+                        onClick = { selecting = !selecting },
+                    ),
+                ),
+                containerColor = colors.primaryContainer.copy(alpha = 0.90f),
+                contentColor = colors.onPrimaryContainer,
+                checkedContainerColor = colors.primary,
+                checkedContentColor = colors.onPrimary,
+            )
         }
     }
 }
@@ -1405,17 +1481,17 @@ private fun PlayerActionPill(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.94f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        animationSpec = expressiveSpatialSpring(),
         label = "pillScale",
     )
     val bg by animateColorAsState(
         targetValue = if (selected) colors.primary else colors.secondaryContainer,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = expressiveColorTween(),
         label = "pillBg",
     )
     val fg by animateColorAsState(
         targetValue = if (selected) colors.onPrimary else colors.onSecondaryContainer,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = expressiveColorTween(),
         label = "pillFg",
     )
     Surface(
@@ -1454,6 +1530,8 @@ private fun ExpressiveWavyScrubber(
     playing: Boolean,
     activeColor: Color,
     inactiveColor: Color,
+    onScrubStart: () -> Unit,
+    onScrubEnd: () -> Unit,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1469,11 +1547,8 @@ private fun ExpressiveWavyScrubber(
         label = "phase",
     )
     val amplitudeMultiplier by animateFloatAsState(
-        targetValue = if (playing) 1f else 0.12f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow,
-        ),
+        targetValue = if (playing) 1f else 0.10f,
+        animationSpec = expressiveSpatialSpring(),
         label = "waveAmp",
     )
 
@@ -1485,10 +1560,15 @@ private fun ExpressiveWavyScrubber(
                 }
             }
             .pointerInput(Unit) {
-                detectHorizontalDragGestures { change, _ ->
-                    change.consume()
-                    onSeek((change.position.x / size.width.toFloat()).coerceIn(0f, 1f))
-                }
+                detectHorizontalDragGestures(
+                    onDragStart = { onScrubStart() },
+                    onDragEnd = { onScrubEnd() },
+                    onDragCancel = { onScrubEnd() },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        onSeek((change.position.x / size.width.toFloat()).coerceIn(0f, 1f))
+                    },
+                )
             },
     ) {
         val centerY = size.height / 2f
@@ -1549,19 +1629,72 @@ private fun SkipSecondsBadge(
     contentDescription: String,
 ) {
     Box(
-        modifier = Modifier.size(36.dp),
+        modifier = Modifier
+            .size(34.dp)
+            .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = if (forward) MetrolistIcons.Outlined.FastForward else MetrolistIcons.Outlined.Replay,
-            contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(28.dp),
-        )
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 2.2.dp.toPx()
+            val inset = 4.dp.toPx()
+            val arcSize = Size(size.width - inset * 2f, size.height - inset * 2f)
+            val topLeft = Offset(inset, inset)
+
+            // Draw a ~280 deg circular arc leaving a gap at the top-center for the arrowhead
+            if (forward) {
+                drawArc(
+                    color = tint,
+                    startAngle = -65f,
+                    sweepAngle = 285f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+                // Clockwise arrowhead at top-right (-65 deg)
+                val angleRad = (-65f * PI / 180f).toFloat()
+                val r = arcSize.width / 2f
+                val tip = Offset(
+                    size.width / 2f + r * cos(angleRad),
+                    size.height / 2f + r * sin(angleRad),
+                )
+                val arrow = Path().apply {
+                    moveTo(tip.x + 1.dp.toPx(), tip.y + 1.dp.toPx())
+                    lineTo(tip.x - 5.dp.toPx(), tip.y - 3.dp.toPx())
+                    moveTo(tip.x + 1.dp.toPx(), tip.y + 1.dp.toPx())
+                    lineTo(tip.x - 1.dp.toPx(), tip.y - 6.dp.toPx())
+                }
+                drawPath(arrow, color = tint, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            } else {
+                drawArc(
+                    color = tint,
+                    startAngle = -115f,
+                    sweepAngle = -285f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+                // Counter-clockwise arrowhead at top-left (-115 deg)
+                val angleRad = (-115f * PI / 180f).toFloat()
+                val r = arcSize.width / 2f
+                val tip = Offset(
+                    size.width / 2f + r * cos(angleRad),
+                    size.height / 2f + r * sin(angleRad),
+                )
+                val arrow = Path().apply {
+                    moveTo(tip.x - 1.dp.toPx(), tip.y + 1.dp.toPx())
+                    lineTo(tip.x + 5.dp.toPx(), tip.y - 3.dp.toPx())
+                    moveTo(tip.x - 1.dp.toPx(), tip.y + 1.dp.toPx())
+                    lineTo(tip.x + 1.dp.toPx(), tip.y - 6.dp.toPx())
+                }
+                drawPath(arrow, color = tint, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
         Text(
             text = seconds.toString(),
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 9.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
             ),
             color = tint,
@@ -1576,32 +1709,28 @@ private fun EpisodeHeroArtwork(
     badge: String,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(Color(0xFF47BBE2)),
+        modifier = modifier.background(Color(0xFF47BBE2)),
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            // Sky gradient
             drawRect(
                 brush = Brush.verticalGradient(
                     colorStops = arrayOf(
                         0.0f to Color(0xFF39B5E6),
-                        0.55f to Color(0xFFA7DFDF),
-                        0.72f to Color(0xFFE7CC82),
-                        1.0f to Color(0xFFDDC06C),
+                        0.56f to Color(0xFFA7DFDF),
+                        0.74f to Color(0xFFE7CC82),
+                        1.0f to Color(0xFFE8D57A),
                     ),
                 ),
             )
-            // Neighborhood houses silhouettes
+            // Neighborhood houses
             val houseColors = listOf(Color(0xFFB36542), Color(0xFFD2A765), Color(0xFF6B8A9C), Color(0xFFC47A53))
             val widths = listOf(0.22f, 0.24f, 0.25f, 0.29f)
             var curX = 0f
             widths.forEachIndexed { idx, wFrac ->
                 val hw = size.width * wFrac
-                val hh = size.height * (0.20f + (idx % 2) * 0.05f)
-                val topY = size.height * 0.66f - hh
+                val hh = size.height * (0.19f + (idx % 2) * 0.05f)
+                val topY = size.height * 0.68f - hh
                 drawRect(
                     color = houseColors[idx],
                     topLeft = Offset(curX, topY),
@@ -1609,7 +1738,7 @@ private fun EpisodeHeroArtwork(
                 )
                 val roof = Path().apply {
                     moveTo(curX - 4.dp.toPx(), topY)
-                    lineTo(curX + hw * 0.5f, topY - size.height * 0.08f)
+                    lineTo(curX + hw * 0.5f, topY - size.height * 0.07f)
                     lineTo(curX + hw, topY)
                     close()
                 }
@@ -1619,70 +1748,63 @@ private fun EpisodeHeroArtwork(
             // Sidewalk
             drawRect(
                 color = Color(0xFFDFC78B),
-                topLeft = Offset(0f, size.height * 0.66f),
-                size = Size(size.width, size.height * 0.34f),
+                topLeft = Offset(0f, size.height * 0.68f),
+                size = Size(size.width, size.height * 0.32f),
             )
-            // Cartoon character: head, headphones, red shirt, dark pants
+            // Character with headphones
             drawCircle(
                 color = Color(0xFFF3C4A4),
-                radius = size.minDimension * 0.11f,
-                center = Offset(size.width * 0.49f, size.height * 0.46f),
+                radius = size.minDimension * 0.10f,
+                center = Offset(size.width * 0.49f, size.height * 0.49f),
             )
-            // Headphones band
             drawArc(
                 color = Color(0xFF1E2832),
                 startAngle = 190f,
                 sweepAngle = 160f,
                 useCenter = false,
-                topLeft = Offset(size.width * 0.36f, size.height * 0.32f),
-                size = Size(size.width * 0.26f, size.height * 0.22f),
-                style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                topLeft = Offset(size.width * 0.37f, size.height * 0.36f),
+                size = Size(size.width * 0.24f, size.height * 0.20f),
+                style = Stroke(width = 4.5.dp.toPx(), cap = StrokeCap.Round),
             )
-            // Red shirt torso
             drawRoundRect(
                 color = Color(0xFFD62B2B),
-                topLeft = Offset(size.width * 0.41f, size.height * 0.56f),
-                size = Size(size.width * 0.16f, size.height * 0.16f),
+                topLeft = Offset(size.width * 0.42f, size.height * 0.58f),
+                size = Size(size.width * 0.14f, size.height * 0.15f),
                 cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx()),
             )
-            // Dark pants/legs
             drawRoundRect(
                 color = Color(0xFF28303D),
-                topLeft = Offset(size.width * 0.42f, size.height * 0.70f),
-                size = Size(size.width * 0.06f, size.height * 0.15f),
+                topLeft = Offset(size.width * 0.43f, size.height * 0.71f),
+                size = Size(size.width * 0.055f, size.height * 0.14f),
                 cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
             )
             drawRoundRect(
                 color = Color(0xFF28303D),
-                topLeft = Offset(size.width * 0.50f, size.height * 0.70f),
-                size = Size(size.width * 0.06f, size.height * 0.14f),
+                topLeft = Offset(size.width * 0.50f, size.height * 0.71f),
+                size = Size(size.width * 0.055f, size.height * 0.13f),
                 cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx()),
             )
         }
-        // Bold comic logo
-        Column(
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineLarge.copy(
+                fontWeight = FontWeight.Black,
+                fontStyle = FontStyle.Italic,
+                letterSpacing = 1.sp,
+            ),
+            color = Color(0xFFF6D638),
+            textAlign = TextAlign.Center,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 18.dp, start = 16.dp, end = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Black,
-                    fontStyle = FontStyle.Italic,
-                    letterSpacing = 1.sp,
-                ),
-                color = Color(0xFFF6D638),
-                textAlign = TextAlign.Center,
-            )
-        }
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(top = 60.dp, start = 16.dp, end = 16.dp),
+        )
         Surface(
             color = Color(0xFF56A9D4),
             shape = RoundedCornerShape(6.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(12.dp),
+                .padding(end = 16.dp, bottom = 22.dp),
         ) {
             Text(
                 text = badge,
@@ -1700,62 +1822,58 @@ private fun PlayerPosterArtwork(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(Color(0xFF10212B)),
+        modifier = modifier.background(Color(0xFF10212B)),
     ) {
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.verticalGradient(
                     colorStops = arrayOf(
                         0.0f to Color(0xFF0C1C26),
-                        0.60f to Color(0xFF1F3847),
-                        0.72f to Color(0xFF7B93A3),
-                        1.0f to Color(0xFF8EA4B2),
+                        0.56f to Color(0xFF1F3847),
+                        0.72f to Color(0xFF6E8596),
+                        1.0f to Color(0xFF7C92A3),
                     ),
                 ),
             )
             // Ground shadow
             drawOval(
                 color = Color(0xAA0A161E),
-                topLeft = Offset(size.width * 0.14f, size.height * 0.67f),
-                size = Size(size.width * 0.72f, size.height * 0.07f),
+                topLeft = Offset(size.width * 0.14f, size.height * 0.69f),
+                size = Size(size.width * 0.72f, size.height * 0.065f),
             )
             // Ferrari F40-inspired silhouette facing left
             val carBody = Path().apply {
-                moveTo(size.width * 0.12f, size.height * 0.66f)
-                lineTo(size.width * 0.14f, size.height * 0.60f)
-                lineTo(size.width * 0.34f, size.height * 0.56f)
-                lineTo(size.width * 0.45f, size.height * 0.49f)
-                lineTo(size.width * 0.63f, size.height * 0.49f)
-                lineTo(size.width * 0.76f, size.height * 0.55f)
-                lineTo(size.width * 0.80f, size.height * 0.45f)
-                lineTo(size.width * 0.86f, size.height * 0.45f)
-                lineTo(size.width * 0.87f, size.height * 0.65f)
+                moveTo(size.width * 0.12f, size.height * 0.68f)
+                lineTo(size.width * 0.14f, size.height * 0.62f)
+                lineTo(size.width * 0.34f, size.height * 0.58f)
+                lineTo(size.width * 0.45f, size.height * 0.51f)
+                lineTo(size.width * 0.63f, size.height * 0.51f)
+                lineTo(size.width * 0.76f, size.height * 0.57f)
+                lineTo(size.width * 0.80f, size.height * 0.47f)
+                lineTo(size.width * 0.86f, size.height * 0.47f)
+                lineTo(size.width * 0.87f, size.height * 0.67f)
                 close()
             }
             drawPath(carBody, color = Color(0xFFC81E1E))
-            // Cabin glass
             val cabin = Path().apply {
-                moveTo(size.width * 0.38f, size.height * 0.55f)
-                lineTo(size.width * 0.46f, size.height * 0.50f)
-                lineTo(size.width * 0.60f, size.height * 0.50f)
-                lineTo(size.width * 0.66f, size.height * 0.55f)
+                moveTo(size.width * 0.38f, size.height * 0.57f)
+                lineTo(size.width * 0.46f, size.height * 0.52f)
+                lineTo(size.width * 0.60f, size.height * 0.52f)
+                lineTo(size.width * 0.66f, size.height * 0.57f)
                 close()
             }
             drawPath(cabin, color = Color(0xFF1A252D))
-            // Wheels + silver rims
-            val wheelRadius = size.minDimension * 0.068f
+            val wheelRadius = size.minDimension * 0.065f
             listOf(0.28f, 0.72f).forEach { cx ->
                 drawCircle(
                     color = Color(0xFF121619),
                     radius = wheelRadius,
-                    center = Offset(size.width * cx, size.height * 0.66f),
+                    center = Offset(size.width * cx, size.height * 0.68f),
                 )
                 drawCircle(
                     color = Color(0xFFC5CFD5),
                     radius = wheelRadius * 0.58f,
-                    center = Offset(size.width * cx, size.height * 0.66f),
+                    center = Offset(size.width * cx, size.height * 0.68f),
                 )
             }
         }
@@ -1770,7 +1888,8 @@ private fun PlayerPosterArtwork(
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 34.dp),
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(top = 66.dp),
         )
     }
 }
@@ -1788,8 +1907,8 @@ private fun ShowHeroArtwork(
             drawRect(
                 brush = Brush.verticalGradient(
                     colorStops = arrayOf(
-                        0.0f to Color(0xFF28AEE6),
-                        0.55f to Color(0xFF4CC4F0),
+                        0.0f to Color(0xFF2CB2E8),
+                        0.54f to Color(0xFF5DCBF3),
                         1.0f to colors.surface,
                     ),
                 ),
@@ -1797,57 +1916,23 @@ private fun ShowHeroArtwork(
             // Clouds
             drawCircle(
                 color = Color.White.copy(alpha = 0.92f),
-                radius = size.minDimension * 0.11f,
+                radius = size.minDimension * 0.12f,
                 center = Offset(size.width * 0.06f, size.height * 0.25f),
             )
             drawCircle(
                 color = Color.White.copy(alpha = 0.92f),
-                radius = size.minDimension * 0.09f,
+                radius = size.minDimension * 0.095f,
                 center = Offset(size.width * 0.91f, size.height * 0.22f),
             )
-            // Rolling emerald hill
+            // Rolling emerald hill blending seamlessly into surface
             val hill = Path().apply {
-                moveTo(0f, size.height * 0.66f)
-                quadraticTo(size.width * 0.45f, size.height * 0.54f, size.width, size.height * 0.68f)
+                moveTo(0f, size.height * 0.64f)
+                quadraticTo(size.width * 0.45f, size.height * 0.50f, size.width, size.height * 0.66f)
                 lineTo(size.width, size.height)
                 lineTo(0f, size.height)
                 close()
             }
             drawPath(hill, color = colors.surface)
-            // Billboard grid
-            val boardLeft = size.width * 0.16f
-            val boardTop = size.height * 0.44f
-            val boardWidth = size.width * 0.68f
-            val boardHeight = size.height * 0.23f
-            drawRect(
-                color = Color(0xFF39B2E3),
-                topLeft = Offset(boardLeft, boardTop),
-                size = Size(boardWidth, boardHeight),
-            )
-            drawRect(
-                color = Color(0xFF0A2416),
-                topLeft = Offset(boardLeft, boardTop),
-                size = Size(boardWidth, boardHeight),
-                style = Stroke(width = 1.5.dp.toPx()),
-            )
-            for (i in 1..5) {
-                val x = boardLeft + boardWidth * (i / 6f)
-                drawLine(
-                    color = Color(0xFF0A2416).copy(alpha = 0.6f),
-                    start = Offset(x, boardTop),
-                    end = Offset(x, boardTop + boardHeight),
-                    strokeWidth = 1.dp.toPx(),
-                )
-            }
-            for (j in 1..2) {
-                val y = boardTop + boardHeight * (j / 3f)
-                drawLine(
-                    color = Color(0xFF0A2416).copy(alpha = 0.6f),
-                    start = Offset(boardLeft, y),
-                    end = Offset(boardLeft + boardWidth, y),
-                    strokeWidth = 1.dp.toPx(),
-                )
-            }
         }
         Text(
             text = title,
@@ -1861,31 +1946,53 @@ private fun ShowHeroArtwork(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(top = 60.dp, start = 20.dp, end = 20.dp),
+                .padding(top = 62.dp, start = 20.dp, end = 20.dp),
         )
     }
 }
 
 @Composable
-private fun ShowEpisodeThumbnail(modifier: Modifier = Modifier) {
+private fun ShowEpisodeThumbnail(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
     val colors = MaterialTheme.colorScheme
     Box(
-        modifier = modifier.background(colors.tertiary),
+        modifier = modifier.background(Color(0xFF2CB2E8)),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            drawRect(Color(0xFF34B5E8))
             drawRect(
-                color = colors.surface,
-                topLeft = Offset(0f, size.height * 0.62f),
-                size = Size(size.width, size.height * 0.38f),
+                brush = Brush.verticalGradient(
+                    listOf(Color(0xFF2CB2E8), Color(0xFF5DCBF3)),
+                ),
             )
+            val hill = Path().apply {
+                moveTo(0f, size.height * 0.62f)
+                quadraticTo(size.width * 0.5f, size.height * 0.48f, size.width, size.height * 0.64f)
+                lineTo(size.width, size.height)
+                lineTo(0f, size.height)
+                close()
+            }
+            drawPath(hill, color = colors.surface)
             drawCircle(
-                color = Color(0xFFF6D96B),
-                radius = size.minDimension * 0.24f,
-                center = Offset(size.width * 0.5f, size.height * 0.48f),
+                color = Color.White.copy(alpha = 0.85f),
+                radius = size.minDimension * 0.14f,
+                center = Offset(size.width * 0.20f, size.height * 0.24f),
             )
         }
+        Text(
+            text = title.take(4),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Black,
+                fontSize = 9.sp,
+                letterSpacing = 0.5.sp,
+            ),
+            color = Color(0xFFF6D96B),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 8.dp),
+        )
     }
 }
 
